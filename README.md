@@ -192,4 +192,8 @@ Tests use temporary SQLite databases and do not affect production data.
 - Tests added
 - Stable baseline for further enhancements (e.g., decorators, generators)
 
+## 🤝 Contributing
+
+We welcome contributions from the community.  
+Please read our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing to help maintain a respectful and inclusive environment.
 

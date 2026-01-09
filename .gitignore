@@ -112,3 +112,10 @@ __pypackages__/
 db/*.db 
 db/*.sqlite 
 soulsesne_db
+
+# =========================
+# ML Artifacts
+# =========================
+*.pkl
+*.png
+model_metrics.txt

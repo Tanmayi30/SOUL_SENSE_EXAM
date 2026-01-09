@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 from collections import Counter
+import matplotlib
+matplotlib.use("Agg") # Prevent GUI mainloop conflicts
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
@@ -9,7 +11,8 @@ import matplotlib.dates as mdates
 import json
 import os
 import sqlite3
-from app.models import get_session, Score, JournalEntry
+from app.models import Score, JournalEntry
+from app.db import get_session
 
 class AnalyticsDashboard:
     def __init__(self, parent_root, username):
@@ -54,22 +57,29 @@ class AnalyticsDashboard:
         
     def show_eq_trends(self, parent):
         """Show EQ score trends with matplotlib graph"""
-        conn = sqlite3.connect("soulsense_db")
+        db_path = os.path.join("db", "soulsense.db")
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("""
-        SELECT total_score, timestamp, id 
-        FROM scores 
-        WHERE username = ? 
-        ORDER BY id
-        """, (self.username,))
-        data = cursor.fetchall()
-        conn.close()
+        try:
+            cursor.execute("""
+            SELECT total_score, timestamp, id, sentiment_score 
+            FROM scores 
+            WHERE username = ? 
+            ORDER BY id
+            """, (self.username,))
+            data = cursor.fetchall()
+        except Exception as e:
+            print(f"Error fetching EQ trends: {e}")
+            data = []
+        finally:
+            conn.close()
         
         if not data:
             tk.Label(parent, text="No EQ data available", font=("Arial", 14)).pack(pady=50)
             return
         
         scores = [row[0] for row in data]
+        sentiment_scores = [row[3] if len(row) > 3 else None for row in data]
         timestamps = []
         
         # Parse timestamps, handle missing ones
@@ -118,34 +128,44 @@ class AnalyticsDashboard:
         
         # Create matplotlib figure
         fig = Figure(figsize=(6, 4), dpi=80)
-        ax = fig.add_subplot(111)
+        ax1 = fig.add_subplot(111)
         
-        # Plot line graph
-        ax.plot(range(1, len(scores) + 1), scores, 
+        # Plot EQ Score
+        l1, = ax1.plot(range(1, len(scores) + 1), scores, 
                marker='o', linestyle='-', linewidth=2, markersize=8,
                color='#4CAF50', markerfacecolor='#2196F3', 
-               markeredgewidth=2, markeredgecolor='#1976D2')
+               markeredgewidth=2, markeredgecolor='#1976D2', label="EQ Score")
         
-        # Fill area under line
-        ax.fill_between(range(1, len(scores) + 1), scores, alpha=0.3, color='#4CAF50')
+        ax1.set_xlabel('Attempt Number', fontsize=11, fontweight='bold')
+        ax1.set_ylabel('EQ Score', fontsize=11, fontweight='bold', color='#4CAF50')
+        ax1.tick_params(axis='y', labelcolor='#4CAF50')
+        ax1.set_title('EQ Score & Emotional Sentiment Trends', fontsize=12, fontweight='bold', pad=15)
+        ax1.grid(True, alpha=0.3, linestyle='--')
+        ax1.set_xticks(range(1, len(scores) + 1))
         
-        # Formatting
-        ax.set_xlabel('Attempt Number', fontsize=11, fontweight='bold')
-        ax.set_ylabel('EQ Score', fontsize=11, fontweight='bold')
-        ax.set_title('Your EQ Progress Journey', fontsize=12, fontweight='bold', pad=15)
-        ax.grid(True, alpha=0.3, linestyle='--')
-        ax.set_xticks(range(1, len(scores) + 1))
-        
-        # Add value labels on points
-        for i, score in enumerate(scores):
-            ax.annotate(str(score), 
-                       xy=(i + 1, score), 
-                       xytext=(0, 10),
-                       textcoords='offset points',
-                       ha='center',
-                       fontsize=9,
-                       fontweight='bold',
-                       bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
+        # Plot Sentiment Score (Secondary Axis)
+        if sentiment_scores and any(s is not None and s != 0 for s in sentiment_scores):
+            ax2 = ax1.twinx()
+            # Filter out Nones for plotting
+            valid_indices = [i for i, s in enumerate(sentiment_scores) if s is not None]
+            valid_x = [i + 1 for i in valid_indices]
+            valid_y = [sentiment_scores[i] for i in valid_indices]
+            
+            l2, = ax2.plot(valid_x, valid_y, 
+                     marker='s', linestyle='--', linewidth=2, markersize=6,
+                     color='#FF9800', markerfacecolor='#FFC107',
+                     markeredgewidth=2, markeredgecolor='#E64A19', label="Sentiment")
+                     
+            ax2.set_ylabel('Sentiment Score (-100 to +100)', fontsize=11, fontweight='bold', color='#FF9800')
+            ax2.tick_params(axis='y', labelcolor='#FF9800')
+            ax2.set_ylim(-110, 110)
+            
+            # Combined Legend
+            lines = [l1, l2]
+            labels = [l.get_label() for l in lines]
+            ax1.legend(lines, labels, loc='upper left')
+        else:
+            ax1.legend(loc='upper left')
         
         fig.tight_layout()
         
@@ -248,18 +268,19 @@ class AnalyticsDashboard:
         
         session = get_session()
         try:
-            # EQ insights
-            eq_rows = session.query(Score.total_score)\
+            # EQ and Sentiment insights from SCORES table
+            eq_rows = session.query(Score.total_score, Score.sentiment_score)\
                 .filter_by(username=self.username)\
                 .order_by(Score.id)\
                 .all()
             scores = [r[0] for r in eq_rows]
+            test_sentiments = [r[1] for r in eq_rows if r[1] is not None]
             
-            # Journal insights
+            # Journal insights purely from Journal entries
             j_rows = session.query(JournalEntry.sentiment_score)\
                 .filter_by(username=self.username)\
                 .all()
-            sentiments = [r[0] for r in j_rows]
+            journal_sentiments = [r[0] for r in j_rows]
         finally:
             session.close()
         
@@ -272,14 +293,24 @@ class AnalyticsDashboard:
             else:
                 insights.append("💪 Focus on emotional awareness to boost EQ scores")
         
-        if sentiments:
-            avg_sentiment = sum(sentiments) / len(sentiments)
+        if journal_sentiments:
+            avg_sentiment = sum(journal_sentiments) / len(journal_sentiments)
             if avg_sentiment > 20:
                 insights.append("😊 Your journal shows positive emotional tone - keep it up!")
             elif avg_sentiment < -20:
                 insights.append("🤗 Consider stress management techniques for better emotional balance")
             else:
                 insights.append("⚖️ You maintain balanced emotional tone in your reflections")
+                
+        # Correlation Insight
+        if scores and test_sentiments:
+            latest_score = scores[-1]
+            latest_sentiment = test_sentiments[-1]
+            
+            if latest_score > 35 and latest_sentiment < -20:
+                insights.append("🎭 You have high EQ skills but are feeling down. Use your skills to navigate this emotions.")
+            elif latest_score < 25 and latest_sentiment > 20:
+                insights.append("🌱 Your spirit is high despite lower EQ scores! Use this optimism to learn emotional skills.")
         
         if not insights:
             insights.append("📝 Complete more assessments and journal entries for insights!")

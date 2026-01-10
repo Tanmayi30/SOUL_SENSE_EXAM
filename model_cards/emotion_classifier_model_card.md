@@ -114,17 +114,38 @@ This approach is based on established information retrieval methods (Ramos, 2003
 
 ## Performance Metrics
 
+### Evaluation Methodology
+
+The model is evaluated using standard classification metrics:
+
+- **Accuracy**: Overall correctness of predictions
+- **Precision**: Proportion of positive predictions that are correct
+- **Recall**: Proportion of actual positives correctly identified
+- **F1-Score**: Harmonic mean of precision and recall
+
+**Note on RMSE**: Root Mean Squared Error (RMSE) is a regression metric for continuous value prediction. Since this is a classification model (predicting emotion categories), RMSE is not applicable. Classification metrics (accuracy, precision, recall, F1) are the appropriate measures.
+
+For comprehensive evaluation, run:
+
+```bash
+python evaluate_models.py
+```
+
+This generates detailed metrics, confusion matrices, ROC curves, and performance reports.
+
 ### Model Evaluation
 
-Performance metrics are printed during training via `classification_report`:
+Performance metrics are calculated during training with comprehensive reporting:
 
 #### Expected Performance Ranges
 
 Based on typical text classification tasks:
 
 - **Overall Accuracy**: 75-85% (varies with data quality)
+- **Precision (weighted)**: 0.73-0.83
+- **Recall (weighted)**: 0.75-0.85
+- **F1-Score (weighted)**: 0.74-0.84
 - **Macro Average F1**: 0.70-0.80
-- **Weighted Average F1**: 0.75-0.85
 
 #### Per-Class Metrics
 
@@ -137,6 +158,15 @@ Typical performance (actual values depend on training data):
 | Positive | 0.75-0.85 | 0.75-0.85 | 0.75-0.85 | Strong positive indicators |
 
 **Note**: Actual performance varies significantly based on training data quality and quantity.
+
+### Evaluation Tools
+
+The project includes comprehensive evaluation infrastructure:
+
+- **model_evaluation.py**: Core evaluation metrics module
+- **evaluate_models.py**: Automated evaluation script for all models
+- **Outputs**: Confusion matrices, ROC curves, detailed reports
+- **Comparison**: Side-by-side model performance comparison
 
 ### Feature Importance
 

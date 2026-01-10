@@ -9,8 +9,15 @@ import webbrowser
 import os
 import sys
 import random # For random tips
-import nltk
-from nltk.sentiment import SentimentIntensityAnalyzer
+
+# NLTK (optional) - import defensively so app can run without it
+try:
+    import nltk
+    from nltk.sentiment import SentimentIntensityAnalyzer
+    SENTIMENT_AVAILABLE = True
+except Exception:
+    SENTIMENT_AVAILABLE = False
+    SentimentIntensityAnalyzer = None
 import traceback # Keep this, it was in the original and not explicitly removed
 
 from app.db import get_session, get_connection
@@ -41,11 +48,16 @@ except ImportError:
     logging.warning("Could not import AnalyticsDashboard")
     AnalyticsDashboard = None
 
-# Ensure VADER lexicon is downloaded
-try:
-    nltk.data.find('sentiment/vader_lexicon.zip')
-except LookupError:
-    nltk.download('vader_lexicon', quiet=True)
+# Ensure VADER lexicon is downloaded when NLTK is available
+if SENTIMENT_AVAILABLE:
+    try:
+        nltk.data.find('sentiment/vader_lexicon.zip')
+    except LookupError:
+        try:
+            nltk.download('vader_lexicon', quiet=True)
+        except Exception:
+            # If download fails, continue without sentiment functionality
+            SENTIMENT_AVAILABLE = False
 
 # ---------------- LOGGING SETUP ----------------
 setup_logging()

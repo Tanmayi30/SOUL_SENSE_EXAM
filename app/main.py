@@ -177,7 +177,8 @@ class SoulSenseApp:
         # Initialize ML Predictor
 
         try:
-            self.ml_predictor = SoulSenseMLPredictor()
+            from app.ml.risk_predictor import RiskPredictor
+            self.ml_predictor = RiskPredictor()
             logging.info("ML Predictor initialized successfully")
         except Exception as e:
             logging.error(f"Failed to initialize ML Predictor: {e}")

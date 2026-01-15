@@ -48,6 +48,10 @@ def check_file(filepath):
                 # Whitelist specific lines (like citations)
                 if "Haibo He" in line:
                     continue
+                
+                # Whitelist demographic options/definitions (where Male/Female appear together)
+                if "Male" in line and "Female" in line:
+                    continue
                     
                 for term in GENDERED_TERMS:
                     if re.search(term, line, re.IGNORECASE):

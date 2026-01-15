@@ -108,6 +108,10 @@ def mock_app(mocker):
             "text_primary": "#000000",
             "surface": "#eeeeee"
         },
+        fonts={
+            "h1": ("Arial", 24, "bold"),
+            "body": ("Arial", 12)
+        },
         user_data={}
     )
     

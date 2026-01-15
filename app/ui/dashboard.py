@@ -471,6 +471,8 @@ class AnalyticsDashboard:
                 self.correlation_text.insert(tk.END, 
                     "⚠️ Need at least 2 EQ tests for correlation analysis.\n\n"
                     "Complete more tests and try again!")
+                if self.correlation_text:
+                     self.correlation_text.configure(state='disabled')
                 return
             
             scores = [row[0] for row in data]

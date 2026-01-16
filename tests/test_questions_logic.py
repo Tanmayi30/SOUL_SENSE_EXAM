@@ -132,7 +132,7 @@ def test_return_structure_is_5_tuple(mock_all_io):
 @patch('app.questions.os.makedirs')
 @patch('app.questions.os.path.exists')
 @patch('app.questions.json.dump')
-@patch('app.questions.open', new_callable=mock_open)
+@patch('builtins.open', new_callable=mock_open)
 def test_disk_cache_save(mock_file, mock_json_dump, mock_exists, mock_makedirs):
     from app.questions import _save_to_disk_cache
     

@@ -2,14 +2,35 @@ import pytest
 import sys
 from unittest.mock import MagicMock, patch, call
 
-# --- PRE-MOCK CRITICAL DEPENDENCIES ---
-sys.modules['app.db'] = MagicMock()
-sys.modules['app.questions'] = MagicMock()
-sys.modules['app.services.exam_service'] = MagicMock()
-sys.modules['app.utils'] = MagicMock()
-# --------------------------------------
+# --- ISOLATION SETUP ---
+# See test_cli_refactored.py for detailed explanation.
+_patch_targets = ['app.db', 'app.questions', 'app.services.exam_service', 'app.utils']
+_orig_modules = {k: sys.modules.get(k) for k in _patch_targets}
+
+for k in _patch_targets:
+    sys.modules[k] = MagicMock()
 
 from app.cli import SoulSenseCLI
+
+for k, v in _orig_modules.items():
+    if v is not None:
+        sys.modules[k] = v
+    else:
+        sys.modules.pop(k, None)
+# -----------------------
+
+@pytest.fixture(autouse=True)
+def runtime_isolation():
+    """Ensure runtime lazy imports also get mocks"""
+    mocks = {
+        'app.db': MagicMock(), 
+        'app.questions': MagicMock(), 
+        'app.services.exam_service': MagicMock(), 
+        'app.utils': MagicMock(),
+        'app.models': MagicMock(),
+    }
+    with patch.dict(sys.modules, mocks):
+        yield
 
 @pytest.fixture
 def cli_instance():

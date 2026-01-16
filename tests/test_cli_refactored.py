@@ -2,17 +2,39 @@ import pytest
 import sys
 from unittest.mock import MagicMock, patch, call
 
-# --- PRE-MOCK CRITICAL DEPENDENCIES ---
-# We MUST mock these before 'app.cli' is imported because app.cli imports them at module level.
-# If we don't, they try to load DB/Files and fail.
-sys.modules['app.db'] = MagicMock()
-sys.modules['app.questions'] = MagicMock()
-sys.modules['app.services.exam_service'] = MagicMock() # This is the Mock Class source
-sys.modules['app.utils'] = MagicMock()
-# --------------------------------------
+# --- ISOLATION SETUP ---
+# To test app.cli without side effects and without polluting other tests:
+# 1. Save originals
+_patch_targets = ['app.db', 'app.questions', 'app.services.exam_service', 'app.utils']
+_orig_modules = {k: sys.modules.get(k) for k in _patch_targets}
 
-# Now safe to import
+# 2. Patch
+for k in _patch_targets:
+    sys.modules[k] = MagicMock()
+
+# 3. Import (It will bind to the mocks)
 from app.cli import SoulSenseCLI
+
+# 4. Restore immediately
+for k, v in _orig_modules.items():
+    if v is not None:
+        sys.modules[k] = v
+    else:
+        sys.modules.pop(k, None)
+# -----------------------
+
+@pytest.fixture(autouse=True)
+def runtime_isolation():
+    """Ensure runtime lazy imports also get mocks"""
+    mocks = {
+        'app.db': MagicMock(), 
+        'app.questions': MagicMock(), 
+        'app.services.exam_service': MagicMock(), 
+        'app.utils': MagicMock(),
+        'app.models': MagicMock(),
+    }
+    with patch.dict(sys.modules, mocks):
+        yield
 
 # Mocks for dependencies
 @pytest.fixture
@@ -26,9 +48,7 @@ def mock_deps():
 
 @pytest.fixture
 def cli_instance(mock_deps):
-    # Need to patch where it's used IN app.cli (or the mocks we injected)
-    # Since we mocked app.utils in sys.modules, app.utils.load_settings is a Mock.
-    
+    # Retrieve the active mock from sys.modules (injected by runtime_isolation)
     app_utils_mock = sys.modules['app.utils']
     app_utils_mock.load_settings.return_value = mock_deps['settings']
     

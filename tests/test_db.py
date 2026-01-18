@@ -64,10 +64,13 @@ def test_delete_user_data(temp_db, monkeypatch):
     session.close()
 
     # Mock BASE_DIR for exports directory
+    # IMPORTANT: Capture original os.path.join BEFORE patching to avoid recursion
+    original_join = os.path.join
+
     def mock_join(*args):
         if args[-1] == "exports":
             return temp_exports_dir
-        return os.path.join(*args)
+        return original_join(*args)
 
     monkeypatch.setattr("os.path.join", mock_join)
 

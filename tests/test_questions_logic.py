@@ -26,7 +26,7 @@ def clean_cache():
 def mock_all_io():
     """Mock File I/O and Threads to prevent side effects"""
     with patch('app.questions.safe_thread_run') as mock_thread, \
-         patch('app.db.safe_db_context') as mock_safe_db, \
+         patch('app.questions.safe_db_context') as mock_safe_db, \
          patch('app.questions._load_from_disk_cache', return_value=None) as mock_disk:
         # Setup context manager mock
         mock_session = MagicMock()

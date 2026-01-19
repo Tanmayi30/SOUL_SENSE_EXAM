@@ -654,6 +654,9 @@ class SoulSenseCLI:
                 self.get_input("\nPress Enter to continue...")
                 return
             
+            # Import atomic_write
+            from app.utils.atomic import atomic_write
+            
             if choice == '1':
                 # JSON Export
                 data = {
@@ -671,12 +674,12 @@ class SoulSenseCLI:
                         } for r in rows
                     ]
                 }
-                with open(filepath, 'w', encoding='utf-8') as f:
+                with atomic_write(filepath, 'w', encoding='utf-8') as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
                     
             elif choice == '2':
                 # CSV Export
-                with open(filepath, 'w', encoding='utf-8') as f:
+                with atomic_write(filepath, 'w', encoding='utf-8') as f:
                     f.write("timestamp,score,sentiment,reflection,is_rushed,is_inconsistent\n")
                     for r in rows:
                         reflection = (r[3] or "").replace('"', '""').replace('\n', ' ')

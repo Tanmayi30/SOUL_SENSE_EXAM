@@ -717,3 +717,37 @@ AttributeError: 'UserProfileView' object has no attribute '_render_export_view'.
 2026-01-19 17:17:31 - app.ml.clustering - INFO - [clustering.py:617] - Model loaded from B:\Open_Source\soul_sence_Exam\SOUL_SENSE_EXAM\app\ml\models\clustering\emotional_profile_model.pkl
 2026-01-19 17:19:30 - app.services.exam_service - INFO - [exam_service.py:55] - Exam session started for user: rohan1
 2026-01-19 17:19:42 - app.services.exam_service - INFO - [exam_service.py:220] - Exam saved. Score: 15, Sentiment: -54.230000000000004, UserID: 1
+2026-01-19 17:20:19 - app.ml.clustering - INFO - [clustering.py:617] - Model loaded from B:\Open_Source\soul_sence_Exam\SOUL_SENSE_EXAM\app\ml\models\clustering\emotional_profile_model.pkl
+2026-01-19 17:20:24 - __main__ - INFO - [main.py:430] - Initiating graceful application shutdown...
+2026-01-19 17:20:24 - __main__ - INFO - [main.py:439] - Database session committed and closed successfully
+2026-01-19 17:20:24 - __main__ - INFO - [main.py:444] - Application shutdown complete
+2026-01-19 17:20:24 - __main__ - INFO - [main.py:430] - Initiating graceful application shutdown...
+2026-01-19 17:20:24 - __main__ - INFO - [main.py:439] - Database session committed and closed successfully
+2026-01-19 17:20:24 - __main__ - INFO - [main.py:444] - Application shutdown complete
+2026-01-19 19:11:51 - root - INFO - [logger.py:85] - Logging initialized.
+2026-01-19 19:11:51 - app.startup_checks - INFO - [startup_checks.py:302] - Running startup integrity checks...
+2026-01-19 19:11:51 - app.startup_checks - INFO - [startup_checks.py:272] - Config integrity check passed
+2026-01-19 19:11:51 - app.startup_checks - INFO - [startup_checks.py:320] - ✓ config_integrity: Configuration is valid
+2026-01-19 19:11:51 - app.startup_checks - INFO - [startup_checks.py:195] - Required files check passed
+2026-01-19 19:11:51 - app.startup_checks - INFO - [startup_checks.py:320] - ✓ required_files: All required files and directories present
+2026-01-19 19:11:51 - app.questions - INFO - [questions.py:52] - Loaded 100 active questions into memory.
+2026-01-19 19:11:51 - app.startup_checks - INFO - [startup_checks.py:121] - Database schema check passed
+2026-01-19 19:11:51 - app.startup_checks - INFO - [startup_checks.py:320] - ✓ database_schema: All required tables present
+2026-01-19 19:11:51 - app.startup_checks - INFO - [startup_checks.py:345] - Integrity checks complete: 3 passed, 0 warnings, 0 failed
+2026-01-19 19:11:51 - __main__ - INFO - [main.py:485] - Startup Integrity Check Results:
+========================================
+✓ config_integrity: Configuration is valid
+✓ required_files: All required files and directories present
+✓ database_schema: All required tables present
+========================================
+2026-01-19 19:11:51 - __main__ - INFO - [main.py:515] - Preloading questions into memory...
+2026-01-19 19:11:51 - app.questions - INFO - [questions.py:52] - Loaded 100 active questions into memory.
+2026-01-19 19:12:07 - app.services.exam_service - INFO - [exam_service.py:55] - Exam session started for user: rohan1
+2026-01-19 19:12:09 - app.ml.clustering - INFO - [clustering.py:617] - Model loaded from B:\Open_Source\soul_sence_Exam\SOUL_SENSE_EXAM\app\ml\models\clustering\emotional_profile_model.pkl
+2026-01-19 19:12:11 - app.ml.clustering - INFO - [clustering.py:617] - Model loaded from B:\Open_Source\soul_sence_Exam\SOUL_SENSE_EXAM\app\ml\models\clustering\emotional_profile_model.pkl
+2026-01-19 19:12:26 - __main__ - INFO - [main.py:430] - Initiating graceful application shutdown...
+2026-01-19 19:12:26 - __main__ - INFO - [main.py:439] - Database session committed and closed successfully
+2026-01-19 19:12:26 - __main__ - INFO - [main.py:444] - Application shutdown complete
+2026-01-19 19:12:26 - __main__ - INFO - [main.py:430] - Initiating graceful application shutdown...
+2026-01-19 19:12:26 - __main__ - INFO - [main.py:439] - Database session committed and closed successfully
+2026-01-19 19:12:26 - __main__ - INFO - [main.py:444] - Application shutdown complete

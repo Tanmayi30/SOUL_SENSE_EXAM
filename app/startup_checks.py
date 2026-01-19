@@ -209,7 +209,9 @@ def check_config_integrity() -> IntegrityCheckResult:
         if not os.path.exists(CONFIG_PATH):
             # Config missing - create default
             try:
-                with open(CONFIG_PATH, 'w') as f:
+                from app.utils.atomic import atomic_write
+                
+                with atomic_write(CONFIG_PATH, 'w') as f:
                     json.dump(DEFAULT_CONFIG, f, indent=4)
                 logger.info(f"Created default config at {CONFIG_PATH}")
                 return IntegrityCheckResult(
@@ -234,8 +236,10 @@ def check_config_integrity() -> IntegrityCheckResult:
             # Corrupt config - attempt recovery by backing up and creating new
             backup_path = CONFIG_PATH + ".corrupt.bak"
             try:
+                from app.utils.atomic import atomic_write
+                
                 os.rename(CONFIG_PATH, backup_path)
-                with open(CONFIG_PATH, 'w') as f:
+                with atomic_write(CONFIG_PATH, 'w') as f:
                     json.dump(DEFAULT_CONFIG, f, indent=4)
                 logger.warning(f"Corrupt config backed up to {backup_path}, created new default")
                 return IntegrityCheckResult(

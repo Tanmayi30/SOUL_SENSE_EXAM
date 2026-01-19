@@ -1528,7 +1528,9 @@ class UserProfileView:
                     return
                 
                 # 5. Write File
-                with open(filename, 'w', encoding='utf-8') as f:
+                from app.utils.atomic import atomic_write
+                
+                with atomic_write(filename, 'w', encoding='utf-8') as f:
                     json.dump(export_data, f, indent=2, ensure_ascii=False)
                     
                 messagebox.showinfo("Export Success", f"Data exported successfully to:\n{filename}")

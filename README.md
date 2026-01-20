@@ -298,6 +298,10 @@ The application is grounded in established emotional intelligence theory (Salove
   - Create timestamped local backups of your data
   - Restore from any previous backup with safety copy
   - Manage backups via Settings → Data Backup
+- **Loading States for Long Operations (NEW!)**
+  - Visual feedback during PDF export, AI analysis, and data export
+  - Animated loading overlay prevents user confusion
+  - Automatic cleanup on completion or error
 
 ---
 

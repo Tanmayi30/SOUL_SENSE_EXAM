@@ -106,8 +106,9 @@ def load_config() -> Dict[str, Any]:
 
 def save_config(new_config: Dict[str, Any]) -> bool:
     """Save configuration to config.json."""
+    from app.utils.atomic import atomic_write
     try:
-        with open(CONFIG_PATH, "w") as f:
+        with atomic_write(CONFIG_PATH, "w") as f:
             json.dump(new_config, f, indent=4)
         logging.info("Configuration saved successfully.")
         return True

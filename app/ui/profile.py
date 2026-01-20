@@ -20,6 +20,7 @@ from app.validation import (
 )
 from app.constants import FONT_FAMILY_SECONDARY
 from app.ui.validation_ui import setup_entry_limit, setup_text_limit
+from app.ui.components.loading_overlay import show_loading, hide_loading
 
 class UserProfileView:
     def __init__(self, parent_root: tk.Widget, app_instance: Any) -> None:
@@ -665,18 +666,10 @@ class UserProfileView:
         # Open crop dialog
         self._open_crop_dialog(filepath)
     
-    def _open_crop_dialog(self, filepath):
-        """Open a dialog to crop the selected image to a square."""
+    def _open_crop_dialog(self, image_path):
+        """Open image cropper dialog"""
         from PIL import Image, ImageTk
         import os
-        
-        try:
-            original_img = Image.open(filepath)
-        except Exception as e:
-            from tkinter import messagebox
-            messagebox.showerror("Error", f"Could not open image: {e}", parent=self.window)
-            return
-        
         # Create crop dialog
         dialog = tk.Toplevel(self.window)
         dialog.title("Crop Profile Photo")
@@ -1459,6 +1452,7 @@ class UserProfileView:
         btn_frame.pack(anchor="w")
         
         def do_export_json():
+            loading = None
             try:
                 from app.utils.file_validation import validate_file_path, sanitize_filename, ValidationError
                 from tkinter import filedialog
@@ -1527,13 +1521,23 @@ class UserProfileView:
                     messagebox.showerror("Security Error", str(ve))
                     return
                 
+                # Show loading overlay during file write
+                loading = show_loading(self.window, "Exporting your data...")
+                self.window.update()  # Force UI update
+                
                 # 5. Write File
-                with open(filename, 'w', encoding='utf-8') as f:
+                from app.utils.atomic import atomic_write
+                
+                with atomic_write(filename, 'w', encoding='utf-8') as f:
                     json.dump(export_data, f, indent=2, ensure_ascii=False)
+                
+                hide_loading(loading)
+                loading = None
                     
                 messagebox.showinfo("Export Success", f"Data exported successfully to:\n{filename}")
                 
             except Exception as e:
+                hide_loading(loading)
                 logging.error(f"Export failed: {e}")
                 messagebox.showerror("Export Error", f"Failed to export data: {e}")
 
@@ -1636,9 +1640,43 @@ class UserProfileView:
         warning_label.pack(anchor="w", pady=(0, 20))
         
         # ==================
+        # Data Backup Section (Issue #345)
+        # ==================
+        self._create_section_label(parent, "Data Backup")
+        
+        backup_desc = tk.Label(
+            parent,
+            text="Create and restore local backups of your data",
+            font=self.styles.get_font("xs"),
+            bg=colors.get("card_bg"),
+            fg="gray"
+        )
+        backup_desc.pack(anchor="w", pady=(0, 10))
+        
+        backup_btn = tk.Button(
+            parent,
+            text="💾 Manage Backups",
+            command=self._open_backup_manager,
+            font=self.styles.get_font("md", "bold"),
+            bg=colors.get("primary"),
+            fg="white",
+            relief="flat",
+            padx=20,
+            pady=10,
+            cursor="hand2"
+        )
+        backup_btn.pack(anchor="w", pady=(0, 20))
+        
+        # ==================
         # Experimental Features Section
         # ==================
         self._render_experimental_flags_section(parent)
+
+    def _open_backup_manager(self):
+        """Open the backup manager dialog (Issue #345)."""
+        from app.ui.backup_manager import BackupManager
+        backup_manager = BackupManager(self.app)
+        backup_manager.show_backup_dialog()
 
     def _save_settings(self):
         """Save settings to DB"""

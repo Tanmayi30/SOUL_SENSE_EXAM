@@ -342,7 +342,7 @@ class JournalFeature:
                     sentiment_score=sentiment_score,
                     mood=self._app_mood_from_score(sentiment_score),
                     created_at=current_time,
-                    tags=','.join(emotional_patterns.keys())
+                    tags=emotional_patterns
                 )
                 session.add(entry)
                 # Commit handled by context manager

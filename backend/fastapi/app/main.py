@@ -5,6 +5,7 @@ from .routers import health, auth, assessments, questions
 
 settings = get_settings()
 
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="SoulSense API",
@@ -15,7 +16,7 @@ def create_app() -> FastAPI:
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Configure appropriately for production
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

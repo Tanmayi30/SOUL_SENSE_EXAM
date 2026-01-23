@@ -5,7 +5,7 @@ import logging
 from contextlib import contextmanager
 from typing import Iterator, Dict, Any, Optional, Generator
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import scoped_session, sessionmaker, Session
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Create engine and session
 engine = create_engine(DATABASE_URL, echo=False)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
 
 def get_engine() -> Engine:
     return engine

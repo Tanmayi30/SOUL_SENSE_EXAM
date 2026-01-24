@@ -55,7 +55,7 @@ def test_health():
     """Test health endpoint."""
     response = requests.get(f"{BASE_URL}/health")
     print_response("GET /health", response)
-    return response.status_code == 200
+    assert response.status_code == 200
 
 
 def test_create_setting(token: str):
@@ -73,7 +73,7 @@ def test_create_setting(token: str):
     )
     print_response("PUT /api/sync/settings/theme", response)
     
-    return response.status_code == 200
+    assert response.status_code == 200
 
 
 def test_get_setting(token: str):
@@ -90,7 +90,7 @@ def test_get_setting(token: str):
     )
     print_response("GET /api/sync/settings/theme", response)
     
-    return response.status_code == 200
+    assert response.status_code == 200
 
 
 def test_get_all_settings(token: str):
@@ -112,7 +112,7 @@ def test_get_all_settings(token: str):
     )
     print_response("GET /api/sync/settings", response)
     
-    return response.status_code == 200
+    assert response.status_code == 200
 
 
 def test_update_setting_with_version(token: str):
@@ -129,21 +129,19 @@ def test_update_setting_with_version(token: str):
         headers=headers
     )
     
-    if get_response.status_code == 200:
-        current = get_response.json()
-        current_version = current.get("version", 1)
-        print(f"Current version: {current_version}")
-        
-        # Update with correct version
-        response = requests.put(
-            f"{BASE_URL}/api/sync/settings/theme",
-            json={"value": "light", "expected_version": current_version},
-            headers=headers
-        )
-        print_response("PUT /api/sync/settings/theme (with correct version)", response)
-        return response.status_code == 200
+    assert get_response.status_code == 200
+    current = get_response.json()
+    current_version = current.get("version", 1)
+    print(f"Current version: {current_version}")
     
-    return False
+    # Update with correct version
+    response = requests.put(
+        f"{BASE_URL}/api/sync/settings/theme",
+        json={"value": "light", "expected_version": current_version},
+        headers=headers
+    )
+    print_response("PUT /api/sync/settings/theme (with correct version)", response)
+    assert response.status_code == 200
 
 
 def test_conflict_detection(token: str):
@@ -163,7 +161,7 @@ def test_conflict_detection(token: str):
     print_response("PUT /api/sync/settings/theme (with wrong version)", response)
     
     # Should return 409 Conflict
-    return response.status_code == 409
+    assert response.status_code == 409
 
 
 def test_delete_setting(token: str):
@@ -188,7 +186,7 @@ def test_delete_setting(token: str):
     )
     print_response("DELETE /api/sync/settings/to_delete", response)
     
-    return response.status_code == 204
+    assert response.status_code == 204
 
 
 def test_batch_upsert(token: str):
@@ -212,7 +210,7 @@ def test_batch_upsert(token: str):
     )
     print_response("POST /api/sync/settings/batch", response)
     
-    return response.status_code == 200
+    assert response.status_code == 200
 
 
 def test_unauthenticated_access():
@@ -225,7 +223,7 @@ def test_unauthenticated_access():
     print_response("GET /api/sync/settings (no auth)", response)
     
     # Should return 401 Unauthorized
-    return response.status_code == 401
+    assert response.status_code == 401
 
 
 def test_not_found(token: str):
@@ -242,78 +240,4 @@ def test_not_found(token: str):
     )
     print_response("GET /api/sync/settings/nonexistent_key_12345", response)
     
-    return response.status_code == 404
-
-
-def run_all_tests():
-    """Run all Settings Sync API tests."""
-    print("\n" + "="*70)
-    print(" "*10 + "SETTINGS SYNCHRONIZATION API TESTING")
-    print(" "*10 + "Issue #396: Create Settings Synchronization API")
-    print("="*70)
-    
-    # Check if server is running
-    try:
-        if not test_health():
-            print("\n❌ Server is not responding. Please start the FastAPI server:")
-            print("   cd backend/fastapi")
-            print("   uvicorn app.main:app --reload")
-            return
-    except requests.exceptions.ConnectionError:
-        print("\n❌ Cannot connect to server. Please start the FastAPI server:")
-        print("   cd backend/fastapi")
-        print("   uvicorn app.main:app --reload")
-        return
-    
-    print("\n✅ Server is running!")
-    
-    # Get auth token
-    print("\n" + "-"*60)
-    print("Getting authentication token...")
-    token = get_auth_token()
-    
-    if not token:
-        print("❌ Failed to get auth token. Cannot proceed with tests.")
-        return
-    
-    print("✅ Got auth token!")
-    
-    # Run tests
-    results = []
-    
-    results.append(("Unauthenticated Access", test_unauthenticated_access()))
-    results.append(("Create Setting", test_create_setting(token)))
-    results.append(("Get Setting", test_get_setting(token)))
-    results.append(("Get All Settings", test_get_all_settings(token)))
-    results.append(("Update with Version", test_update_setting_with_version(token)))
-    results.append(("Conflict Detection", test_conflict_detection(token)))
-    results.append(("Delete Setting", test_delete_setting(token)))
-    results.append(("Batch Upsert", test_batch_upsert(token)))
-    results.append(("Not Found", test_not_found(token)))
-    
-    # Summary
-    print("\n" + "="*70)
-    print("TEST RESULTS SUMMARY")
-    print("="*70)
-    
-    passed = 0
-    failed = 0
-    for test_name, result in results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"  {status} - {test_name}")
-        if result:
-            passed += 1
-        else:
-            failed += 1
-    
-    print("\n" + "-"*60)
-    print(f"Total: {passed} passed, {failed} failed")
-    print("="*70)
-    
-    print("\n📖 Interactive documentation available at:")
-    print(f"  • Swagger UI: {BASE_URL}/docs")
-    print(f"  • ReDoc:      {BASE_URL}/redoc")
-
-
-if __name__ == "__main__":
-    run_all_tests()
+    assert response.status_code == 404

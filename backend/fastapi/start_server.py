@@ -37,7 +37,7 @@ def install_dependencies():
 
 def start_server(host="127.0.0.1", port=8000, reload=True):
     """Start the FastAPI server."""
-    print(f"\n🚀 Starting Soul Sense API server...")
+    print(f"\n[START] Starting Soul Sense API server...")
     print(f"   URL: http://{host}:{port}")
     print(f"   Docs: http://{host}:{port}/docs")
     print(f"   ReDoc: http://{host}:{port}/redoc")
@@ -100,7 +100,7 @@ def main():
                 print("  pip install -r requirements.txt")
                 sys.exit(1)
     else:
-        print("\n✅ Dependencies OK")
+        print("\n[OK] Dependencies OK")
     
     # Determine reload default (True normally, False if non-interactive and not specified)
     reload_val = args.reload

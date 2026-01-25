@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from .config import get_settings_instance
@@ -51,6 +52,16 @@ def create_app() -> FastAPI:
     # Register Health endpoints at root level for orchestration
     app.include_router(health_router, tags=["Health"])
 
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        import traceback
+        print(f"❌ GLOBAL EXCEPTION: {exc}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error", "error": str(exc)}
+        )
+
     # Root endpoint - version discovery
     @app.get("/", tags=["Root"])
     async def root():
@@ -65,11 +76,20 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup_event():
         app.state.settings = settings
-        print("✅ SoulSense API started successfully")
-        print(f"🌐 Environment: {settings.app_env}")
-        print(f"🔧 Debug mode: {settings.debug}")
-        print(f"💾 Database: {settings.database_url}")
-        print(f"📋 API available at /api/v1")
+        
+        # Initialize database tables
+        try:
+            from .services.db_service import Base, engine
+            Base.metadata.create_all(bind=engine)
+            print("[OK] Database tables initialized/verified")
+        except Exception as e:
+            print(f"[ERROR] Database initialization failed: {e}")
+            
+        print("[OK] SoulSense API started successfully")
+        print(f"[ENV] Environment: {settings.app_env}")
+        print(f"[CONFIG] Debug mode: {settings.debug}")
+        print(f"[DB] Database: {settings.database_url}")
+        print(f"[API] API available at /api/v1")
 
     return app
 

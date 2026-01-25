@@ -38,13 +38,13 @@ def token():
     
     # Try to register first
     requests.post(
-        f"{BASE_URL}/auth/register",
+        f"{BASE_URL}/api/v1/auth/register",
         json={"username": username, "password": password}
     )
     
     # Login to get token
     login_response = requests.post(
-        f"{BASE_URL}/auth/login",
+        f"{BASE_URL}/api/v1/auth/login",
         data={"username": username, "password": password}
     )
     
@@ -57,8 +57,8 @@ def token():
 
 def test_health():
     """Test health endpoint."""
-    response = requests.get(f"{BASE_URL}/health")
-    print_response("GET /health", response)
+    response = requests.get(f"{BASE_URL}/api/v1/health")
+    print_response("GET /api/v1/health", response)
     assert response.status_code == 200
 
 
@@ -71,11 +71,11 @@ def test_create_setting(token: str):
     headers = {"Authorization": f"Bearer {token}"}
     
     response = requests.put(
-        f"{BASE_URL}/api/sync/settings/theme",
+        f"{BASE_URL}/api/v1/sync/theme",
         json={"value": "dark"},
         headers=headers
     )
-    print_response("PUT /api/sync/settings/theme", response)
+    print_response("PUT /api/v1/sync/theme", response)
     
     assert response.status_code == 200
 
@@ -89,10 +89,10 @@ def test_get_setting(token: str):
     headers = {"Authorization": f"Bearer {token}"}
     
     response = requests.get(
-        f"{BASE_URL}/api/sync/settings/theme",
+        f"{BASE_URL}/api/v1/sync/theme",
         headers=headers
     )
-    print_response("GET /api/sync/settings/theme", response)
+    print_response("GET /api/v1/sync/theme", response)
     
     assert response.status_code == 200
 
@@ -106,15 +106,15 @@ def test_get_all_settings(token: str):
     headers = {"Authorization": f"Bearer {token}"}
     
     # Create a few more settings
-    requests.put(f"{BASE_URL}/api/sync/settings/language", json={"value": "en"}, headers=headers)
-    requests.put(f"{BASE_URL}/api/sync/settings/fontSize", json={"value": 16}, headers=headers)
-    requests.put(f"{BASE_URL}/api/sync/settings/notifications", json={"value": {"email": True, "push": False}}, headers=headers)
+    requests.put(f"{BASE_URL}/api/v1/sync/language", json={"value": "en"}, headers=headers)
+    requests.put(f"{BASE_URL}/api/v1/sync/fontSize", json={"value": 16}, headers=headers)
+    requests.put(f"{BASE_URL}/api/v1/sync/notifications", json={"value": {"email": True, "push": False}}, headers=headers)
     
     response = requests.get(
-        f"{BASE_URL}/api/sync/settings",
+        f"{BASE_URL}/api/v1/sync",
         headers=headers
     )
-    print_response("GET /api/sync/settings", response)
+    print_response("GET /api/v1/sync", response)
     
     assert response.status_code == 200
 
@@ -129,7 +129,7 @@ def test_update_setting_with_version(token: str):
     
     # First, get current version
     get_response = requests.get(
-        f"{BASE_URL}/api/sync/settings/theme",
+        f"{BASE_URL}/api/v1/sync/theme",
         headers=headers
     )
     
@@ -140,11 +140,11 @@ def test_update_setting_with_version(token: str):
     
     # Update with correct version
     response = requests.put(
-        f"{BASE_URL}/api/sync/settings/theme",
+        f"{BASE_URL}/api/v1/sync/theme",
         json={"value": "light", "expected_version": current_version},
         headers=headers
     )
-    print_response("PUT /api/sync/settings/theme (with correct version)", response)
+    print_response("PUT /api/v1/sync/theme (with correct version)", response)
     assert response.status_code == 200
 
 
@@ -158,11 +158,11 @@ def test_conflict_detection(token: str):
     
     # Try to update with wrong version
     response = requests.put(
-        f"{BASE_URL}/api/sync/settings/theme",
+        f"{BASE_URL}/api/v1/sync/theme",
         json={"value": "another_theme", "expected_version": 999},
         headers=headers
     )
-    print_response("PUT /api/sync/settings/theme (with wrong version)", response)
+    print_response("PUT /api/v1/sync/theme (with wrong version)", response)
     
     # Should return 409 Conflict
     assert response.status_code == 409
@@ -178,17 +178,17 @@ def test_delete_setting(token: str):
     
     # Create a setting to delete
     requests.put(
-        f"{BASE_URL}/api/sync/settings/to_delete",
+        f"{BASE_URL}/api/v1/sync/to_delete",
         json={"value": "temporary"},
         headers=headers
     )
     
     # Delete it
     response = requests.delete(
-        f"{BASE_URL}/api/sync/settings/to_delete",
+        f"{BASE_URL}/api/v1/sync/to_delete",
         headers=headers
     )
-    print_response("DELETE /api/sync/settings/to_delete", response)
+    print_response("DELETE /api/v1/sync/to_delete", response)
     
     assert response.status_code == 204
 
@@ -202,7 +202,7 @@ def test_batch_upsert(token: str):
     headers = {"Authorization": f"Bearer {token}"}
     
     response = requests.post(
-        f"{BASE_URL}/api/sync/settings/batch",
+        f"{BASE_URL}/api/v1/sync/batch",
         json={
             "settings": [
                 {"key": "batch_setting1", "value": "value1"},
@@ -212,7 +212,7 @@ def test_batch_upsert(token: str):
         },
         headers=headers
     )
-    print_response("POST /api/sync/settings/batch", response)
+    print_response("POST /api/v1/sync/batch", response)
     
     assert response.status_code == 200
 
@@ -223,8 +223,8 @@ def test_unauthenticated_access():
     print("TEST: Unauthenticated Access (should fail)")
     print("="*60)
     
-    response = requests.get(f"{BASE_URL}/api/sync/settings")
-    print_response("GET /api/sync/settings (no auth)", response)
+    response = requests.get(f"{BASE_URL}/api/v1/sync")
+    print_response("GET /api/v1/sync (no auth)", response)
     
     # Should return 401 Unauthorized
     assert response.status_code == 401
@@ -239,9 +239,9 @@ def test_not_found(token: str):
     headers = {"Authorization": f"Bearer {token}"}
     
     response = requests.get(
-        f"{BASE_URL}/api/sync/settings/nonexistent_key_12345",
+        f"{BASE_URL}/api/v1/sync/nonexistent_key_12345",
         headers=headers
     )
-    print_response("GET /api/sync/settings/nonexistent_key_12345", response)
+    print_response("GET /api/v1/sync/nonexistent_key_12345", response)
     
     assert response.status_code == 404

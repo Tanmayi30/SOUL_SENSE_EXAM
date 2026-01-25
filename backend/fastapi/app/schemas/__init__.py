@@ -67,7 +67,7 @@ class AssessmentResponse(BaseModel):
     id: int
     username: str
     total_score: int
-    sentiment_score: float
+    sentiment_score: Optional[float] = 0.0
     age: Optional[int]
     detailed_age_group: Optional[str]
     timestamp: str
@@ -88,14 +88,16 @@ class AssessmentDetailResponse(BaseModel):
     id: int
     username: str
     total_score: int
-    sentiment_score: float
+    sentiment_score: Optional[float] = 0.0
     reflection_text: Optional[str]
-    is_rushed: bool
-    is_inconsistent: bool
+    is_rushed: Optional[bool] = Field(default=False)
+    is_inconsistent: Optional[bool] = Field(default=False)
     age: Optional[int]
     detailed_age_group: Optional[str]
     timestamp: str
     responses_count: int
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AssessmentStatsResponse(BaseModel):

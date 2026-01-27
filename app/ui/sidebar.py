@@ -298,6 +298,9 @@ class SidebarNav(tk.Frame):
 
     def toggle_collapse(self):
         """Toggle between mini and full sidebar with animation"""
+        if self.app.is_animating: return # Debounce
+        
+        self.app.is_animating = True
         self.is_collapsed = not self.is_collapsed
         target_width = self.collapsed_width if self.is_collapsed else self.expanded_width
         
@@ -339,6 +342,8 @@ class SidebarNav(tk.Frame):
 
     def _finalize_toggle_state(self):
         """Finalize UI elements after animation finish"""
+        self.app.is_animating = False
+        
         if not self.is_collapsed:
             # Restoration for Expanded Mode
             self.avatar_canvas.pack_forget()

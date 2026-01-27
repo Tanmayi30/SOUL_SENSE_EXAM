@@ -22,6 +22,9 @@ class SoulSenseApp:
         self.view_manager = ViewManager(self)
         self.auth_handler = AppAuth(self)
         self.shutdown_handler = ShutdownHandler(self)
+        
+        # State for optimization
+        self.is_animating = False
 
         # Expose some attributes for backward compatibility
         self.colors = self.initializer.app.colors

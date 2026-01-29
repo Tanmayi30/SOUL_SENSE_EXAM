@@ -75,9 +75,6 @@ class AppInitializer:
             self.app.logger.error(f"Failed to load questions: {e}")
             tk.messagebox.showerror("Error", f"Could not load questions: {e}")
 
-    def start_login_flow(self):
-        """Start the login flow"""
-        self.app.root.after(100, self.show_login_screen)
 
     def show_login_screen(self):
         """Show login popup on startup"""

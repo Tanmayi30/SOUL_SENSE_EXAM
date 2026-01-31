@@ -25,6 +25,26 @@ from api.root_models import JournalEntry, User
 # Sentiment Analysis
 # ============================================================================
 
+# Global analyzer instance
+_sia = None
+
+def get_analyzer():
+    """Lazy load the sentiment analyzer."""
+    global _sia
+    if _sia is None:
+        try:
+            from nltk.sentiment import SentimentIntensityAnalyzer
+            import nltk
+            try:
+                nltk.data.find('sentiment/vader_lexicon.zip')
+            except LookupError:
+                nltk.download('vader_lexicon', quiet=True)
+            _sia = SentimentIntensityAnalyzer()
+        except Exception:
+            # Return None if NLTK fails
+            return None
+    return _sia
+
 def analyze_sentiment(content: str) -> float:
     """
     Analyze sentiment using NLTK VADER.
@@ -34,14 +54,15 @@ def analyze_sentiment(content: str) -> float:
     if not content or len(content.strip()) < 10:
         return 50.0
     
+    analyzer = get_analyzer()
+    if not analyzer:
+         return 50.0
+
     try:
-        from nltk.sentiment import SentimentIntensityAnalyzer
-        sia = SentimentIntensityAnalyzer()
-        scores = sia.polarity_scores(content)
+        scores = analyzer.polarity_scores(content)
         # Convert compound score (-1 to 1) to 0-100 scale
         return round((scores['compound'] + 1) * 50, 2)
     except Exception:
-        # Graceful fallback if NLTK not available
         return 50.0
 
 
@@ -330,15 +351,29 @@ class JournalService:
         return entries, total
 
     def get_analytics(self, current_user: User) -> dict:
-        """Get journal analytics for the current user."""
+        """Get journal analytics for the current user using optimized DB queries."""
         
-        entries = self.db.query(JournalEntry).filter(
+        # Base query filter
+        base_filter = and_(
             JournalEntry.user_id == current_user.id,
             JournalEntry.is_deleted == False
-        ).all()
+        )
         
-        if not entries:
-            return {
+        # 1. Basic Stats (Count, Avg Sentiment, Max/Min)
+        stats = self.db.query(
+            func.count(JournalEntry.id).label('total'),
+            func.avg(JournalEntry.sentiment_score).label('avg_sentiment'),
+            func.avg(JournalEntry.stress_level).label('avg_stress'),
+            func.avg(JournalEntry.sleep_quality).label('avg_sleep')
+        ).filter(base_filter).first()
+        
+        total_entries = stats.total or 0
+        avg_sentiment = stats.avg_sentiment or 50.0
+        avg_stress = stats.avg_stress
+        avg_sleep = stats.avg_sleep
+
+        if total_entries == 0:
+             return {
                 "total_entries": 0,
                 "average_sentiment": 50.0,
                 "sentiment_trend": "stable",
@@ -348,53 +383,54 @@ class JournalService:
                 "entries_this_week": 0,
                 "entries_this_month": 0
             }
-        
-        # Calculate averages
-        sentiments = [e.sentiment_score for e in entries if e.sentiment_score]
-        avg_sentiment = sum(sentiments) / len(sentiments) if sentiments else 50.0
-        
-        stress_levels = [e.stress_level for e in entries if e.stress_level]
-        avg_stress = sum(stress_levels) / len(stress_levels) if stress_levels else None
-        
-        sleep_qualities = [e.sleep_quality for e in entries if e.sleep_quality]
-        avg_sleep = sum(sleep_qualities) / len(sleep_qualities) if sleep_qualities else None
-        
-        # Calculate trend (compare last week to previous week)
+
+        # 2. Trend Analysis (Last 7 days vs Previous 7 days)
         now = datetime.utcnow()
-        week_ago = now - timedelta(days=7)
-        two_weeks_ago = now - timedelta(days=14)
+        week_ago_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        two_weeks_ago_date = (now - timedelta(days=14)).strftime("%Y-%m-%d")
+
+        # Recent Average (Last 7 days)
+        recent_avg = self.db.query(func.avg(JournalEntry.sentiment_score))\
+            .filter(base_filter, JournalEntry.entry_date >= week_ago_date).scalar() or 50.0
+            
+        # Previous Average (7-14 days ago)
+        older_avg = self.db.query(func.avg(JournalEntry.sentiment_score))\
+            .filter(base_filter, 
+                   JournalEntry.entry_date >= two_weeks_ago_date,
+                   JournalEntry.entry_date < week_ago_date).scalar() or 50.0
         
-        recent_entries = [e for e in entries if e.entry_date and e.entry_date >= week_ago.strftime("%Y-%m-%d")]
-        older_entries = [e for e in entries if e.entry_date and two_weeks_ago.strftime("%Y-%m-%d") <= e.entry_date < week_ago.strftime("%Y-%m-%d")]
-        
-        if recent_entries and older_entries:
-            recent_avg = sum(e.sentiment_score or 50 for e in recent_entries) / len(recent_entries)
-            older_avg = sum(e.sentiment_score or 50 for e in older_entries) / len(older_entries)
-            if recent_avg > older_avg + 5:
-                trend = "improving"
-            elif recent_avg < older_avg - 5:
-                trend = "declining"
-            else:
-                trend = "stable"
+        if recent_avg > older_avg + 5:
+            trend = "improving"
+        elif recent_avg < older_avg - 5:
+            trend = "declining"
         else:
             trend = "stable"
+
+        # 3. Counts for periods
+        month_ago_date = (now - timedelta(days=30)).strftime("%Y-%m-%d")
         
-        # Count tags
+        entries_this_week = self.db.query(func.count(JournalEntry.id))\
+            .filter(base_filter, JournalEntry.entry_date >= week_ago_date).scalar() or 0
+            
+        entries_this_month = self.db.query(func.count(JournalEntry.id))\
+            .filter(base_filter, JournalEntry.entry_date >= month_ago_date).scalar() or 0
+
+        # 4. Most Common Tags (Still requires some string parsing due to JSON storage, 
+        # but we can at least limit the fetch if needed, 
+        # or accepting that for now we fetch all tags until we normalize the schema)
+        # For now, we fetch only the tags column to save memory
+        tag_entries = self.db.query(JournalEntry.tags).filter(base_filter).all()
+        
         all_tags = []
-        for entry in entries:
-            all_tags.extend(self._load_tags(entry.tags))
-        tag_counts = {}
-        for tag in all_tags:
-            tag_counts[tag] = tag_counts.get(tag, 0) + 1
-        most_common = sorted(tag_counts.keys(), key=lambda t: tag_counts[t], reverse=True)[:5]
-        
-        # Count recent entries
-        month_ago = now - timedelta(days=30)
-        entries_this_week = len(recent_entries)
-        entries_this_month = len([e for e in entries if e.entry_date and e.entry_date >= month_ago.strftime("%Y-%m-%d")])
+        for (t_str,) in tag_entries:
+             all_tags.extend(self._load_tags(t_str))
+             
+        from collections import Counter
+        tag_counts = Counter(all_tags)
+        most_common = [t for t, c in tag_counts.most_common(5)]
         
         return {
-            "total_entries": len(entries),
+            "total_entries": total_entries,
             "average_sentiment": round(avg_sentiment, 2),
             "sentiment_trend": trend,
             "most_common_tags": most_common,

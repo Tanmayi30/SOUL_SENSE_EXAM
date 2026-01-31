@@ -474,24 +474,41 @@ def create_performance_indexes(engine: Engine) -> None:
         logger.info("Performance indexes created and database optimized")
 
 def preload_frequent_data(session: Session) -> None:
-    """Preload frequently accessed data into cache"""
+    """Preload frequently accessed data into cache (Optimized Bulk)."""
     try:
-        # Cache active questions
+        # 1. OPTIMIZATION: Preserve access counts to restore them
+        access_counts = {}
+        try:
+             # Fetch just ID/AccessCount to map
+             cached_counts = session.query(QuestionCache.question_id, QuestionCache.access_count).all()
+             access_counts = {qid: count for qid, count in cached_counts}
+        except Exception:
+             pass
+        
+        # 2. OPTIMIZATION: Clear Cache Table (Faster than N+1 merge checks)
+        session.query(QuestionCache).delete()
+        
+        # 3. Cache active questions
         active_questions = session.query(Question).filter(
             Question.is_active == 1
         ).order_by(Question.id).all()
         
+        new_entries = []
         for question in active_questions:
-            cache_entry = QuestionCache(
+            new_entries.append(QuestionCache(
                 question_id=question.id,
                 question_text=question.question_text,
                 category_id=question.category_id,
                 difficulty=question.difficulty,
-                is_active=question.is_active
-            )
-            session.merge(cache_entry)
+                is_active=question.is_active,
+                access_count=access_counts.get(question.id, 0) # Restore count or 0
+            ))
         
-        # Cache global statistics
+        # Bulk Insert
+        if new_entries:
+            session.add_all(new_entries)
+        
+        # Cache global statistics (Few items, merge is fine here)
         from sqlalchemy import func
         avg_score = session.query(func.avg(Score.total_score)).scalar() or 0
         question_count = session.query(func.count(Question.id)).filter(
@@ -515,7 +532,7 @@ def preload_frequent_data(session: Session) -> None:
             session.merge(cache_entry)
         
         session.commit()
-        logger.info("Frequent data preloaded into cache")
+        logger.info("Frequent data preloaded into cache (Bulk Optimized)")
         
     except Exception as e:
         logger.error(f"Failed to preload data: {e}")

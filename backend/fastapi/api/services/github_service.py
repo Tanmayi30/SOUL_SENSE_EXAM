@@ -6,7 +6,9 @@ import json
 import aiofiles
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+from cachetools import LRUCache
 from backend.fastapi.api.config import get_settings_instance
+from app.utils.atomic import atomic_write
 
 # NLTK Setup for Sentiment Analysis
 import nltk
@@ -36,14 +38,15 @@ class GitHubService:
         self.owner = self.settings.github_repo_owner
         self.repo = self.settings.github_repo_name
         
-        # Simple in-memory cache: {key: (data, timestamp)}
-        self._cache: Dict[str, tuple[Any, float]] = {}
+        # LRU Cache to prevent memory leaks (Max 1000 items)
+        self._cache = LRUCache(maxsize=1000)
         self.CACHE_TTL = 3600 * 24 * 7  # Increased to 7 days for immunity
         self._client: Optional[httpx.AsyncClient] = None
         
         # Persistent Cache Setup
         self.CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "github_cache.json")
         self._cache_lock = None # Lazy initialization
+        self._last_save_time = 0.0
         
         # Load immediately (sync) but safely
         try:
@@ -58,7 +61,8 @@ class GitHubService:
                 import json
                 with open(self.CACHE_FILE, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self._cache = {k: (v[0], v[1]) for k, v in data.items()}
+                    # Load into LRUCache (evicting oldest if file > 1000 items)
+                    self._cache.update({k: (v[0], v[1]) for k, v in data.items()})
                 print(f"[INFO] Loaded {len(self._cache)} items from persistent cache.")
         except Exception as e:
             print(f"[WARN] Failed to load disk cache: {e}")
@@ -72,18 +76,38 @@ class GitHubService:
                 return data
         return None
 
-    async def _save_cache_to_disk(self):
-        """Async save with lock to prevent race conditions."""
+    async def _save_cache_to_disk(self, force: bool = False):
+        """
+        Async save with lock to prevent race conditions.
+        Throttled to run at most once every 5 minutes unless forced.
+        """
         if not self._cache: return
         
+        now = time.time()
+        # Throttle: Only save if > 300s passed since last save, unless forced
+        if not force and (now - self._last_save_time < 300):
+            return
+
         if self._cache_lock is None:
             self._cache_lock = asyncio.Lock()
 
         try:
             async with self._cache_lock:
+                # Security Check: Scrub potentially sensitive keys before dump if they exist
+                # Note: We store API responses, not headers, but good practice.
+                
+                # Ensure directory exists
                 os.makedirs(os.path.dirname(self.CACHE_FILE), exist_ok=True)
-                async with aiofiles.open(self.CACHE_FILE, 'w', encoding='utf-8') as f:
-                    await f.write(json.dumps(self._cache))
+                
+                # Atomic write to prevent corruption
+                with atomic_write(self.CACHE_FILE, 'w', encoding='utf-8') as f:
+                    # Convert LRUCache to dict for JSON serialization
+                    # We store just value and timestamp, keys are URLs/Params
+                    cache_snapshot = {k: v for k, v in self._cache.items()}
+                    f.write(json.dumps(cache_snapshot))
+                
+                self._last_save_time = now
+                
         except Exception as e:
             # Don't crash on cache save failure
             print(f"[WARN] Failed to save disk cache: {e}")

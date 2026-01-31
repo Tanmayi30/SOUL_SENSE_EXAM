@@ -130,6 +130,7 @@ User Input → GUI Events → Business Logic → Data Validation → Database �
 
 ```bash
 # Create virtual environment
+cd SOUL_SENSE_EXAM
 python -m venv .venv
 
 # Activate (Windows)
@@ -142,6 +143,10 @@ pip install -r requirements.txt
 
 # Initialize Database & Seed Questions
 python -m scripts.setup_dev
+#OR
+# If Not working
+alembic upgrade head
+python scripts/setup/seed_questions_v2.py
 ```
 
 ### 2. Launch Application

@@ -141,6 +141,42 @@ def mock_tk_variables(mocker):
     mocker.patch("tkinter.IntVar", side_effect=MockVar)
     mocker.patch("tkinter.BooleanVar", side_effect=MockVar)
     mocker.patch("tkinter.DoubleVar", side_effect=MockVar)
+    
+    # Enhanced Mock Widget that supports cget and config
+    class MockWidget(mocker.MagicMock):
+        def __init__(self, master=None, **kwargs):
+            super().__init__()
+            self._config = kwargs
+            
+        def cget(self, key):
+            return self._config.get(key, "")
+            
+        def configure(self, **kwargs):
+            self._config.update(kwargs)
+            
+        def config(self, **kwargs):
+            self.configure(**kwargs)
+            
+        def __getitem__(self, key):
+             return self._config.get(key, "")
+
+        def __setitem__(self, key, value):
+            self._config[key] = value
+
+    # Mock core Tk classes to prevent display connection
+    mock_tk = mocker.patch("tkinter.Tk")
+    mock_tk.return_value.winfo_screenwidth.return_value = 1920
+    mock_tk.return_value.winfo_screenheight.return_value = 1080
+    
+    mock_toplevel = mocker.patch("tkinter.Toplevel")
+    mock_toplevel.return_value.winfo_screenwidth.return_value = 1920
+    mock_toplevel.return_value.winfo_screenheight.return_value = 1080
+    
+    mocker.patch("tkinter.Canvas", side_effect=MockWidget)
+    mocker.patch("tkinter.Frame", side_effect=MockWidget)
+    mocker.patch("tkinter.Label", side_effect=MockWidget)
+    mocker.patch("tkinter.Entry", side_effect=MockWidget)
+    mocker.patch("tkinter.Button", side_effect=MockWidget)
 
 @pytest.fixture
 def mock_app(mocker):

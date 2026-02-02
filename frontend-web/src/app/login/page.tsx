@@ -11,12 +11,20 @@ import { loginSchema } from '@/lib/validation';
 import { z } from 'zod';
 import { UseFormReturn } from 'react-hook-form';
 
+import { useAuth } from '@/hooks/useAuth';
+
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const { login, isLoading } = useAuth();
 
+  const handleSubmit = async (data: LoginFormData) => {
+    try {
+      await login(data.email, !!data.rememberMe);
+    } catch (error) {
+      console.error('Login error:', error);
+      // TODO: Show error toast
   const handleSubmit = async (data: LoginFormData, methods: UseFormReturn<LoginFormData>) => {
     setIsLoading(true);
     try {
@@ -112,13 +120,15 @@ export default function LoginPage() {
               transition={{ delay: 0.3 }}
               className="flex items-center justify-between"
             >
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-2 cursor-pointer group">
                 <input
                   type="checkbox"
                   {...methods.register('rememberMe')}
-                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-input text-brand-primary focus:ring-brand-primary transition-colors cursor-pointer"
                 />
-                <span className="text-sm text-muted-foreground">Remember me</span>
+                <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                  Remember me
+                </span>
               </label>
               <Link
                 href="/forgot-password"

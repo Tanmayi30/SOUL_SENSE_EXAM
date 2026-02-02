@@ -141,6 +141,9 @@ class AuthManager:
         self.current_user = None
         self.session_token = None
         self.session_expiry = None
+        # Clear saved Remember Me session
+        from app.auth import session_storage
+        session_storage.clear_session()
 
     def is_logged_in(self):
         if self.current_user is None:

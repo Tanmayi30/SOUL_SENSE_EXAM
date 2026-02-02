@@ -15,12 +15,19 @@ type RegisterFormData = z.infer<typeof registrationSchema>;
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (data: RegisterFormData, methods: UseFormReturn<RegisterFormData>) => {
     setIsLoading(true);
     try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      console.log('Register data:', data);
+      // TODO: Implement actual registration logic
+    } catch (error) {
+      console.error('Registration error:', error);
       const response = await fetch('http://localhost:8000/api/v1/auth/register', {
         method: 'POST',
         headers: {
@@ -219,8 +226,15 @@ export default function RegisterPage() {
                   {showPassword ? 'Hide Password' : 'Show Password'}
                 </Button>
               </div>
-              <Button type="submit" className="w-full">
-                Register
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Registering...
+                  </>
+                ) : (
+                  'Register'
+                )}
               </Button>
             </motion.div>
 

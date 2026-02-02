@@ -1,5 +1,6 @@
 import tkinter as tk
 from app import auth
+from app.auth import session_storage
 from app.logger import get_logger
 from typing import TYPE_CHECKING
 
@@ -115,7 +116,14 @@ class AppAuth:
         show_password_cb = tk.Checkbutton(entry_frame, text="Show Password", variable=show_password_var,
                                          command=toggle_password_visibility, font=("Segoe UI", 10),
                                          bg=self.app.colors["bg"], fg=self.app.colors["text_primary"])
-        show_password_cb.pack(anchor="w", pady=(0, 10))
+        show_password_cb.pack(anchor="w", pady=(0, 5))
+
+        # Remember Me checkbox
+        remember_me_var = tk.BooleanVar()
+        remember_me_cb = tk.Checkbutton(entry_frame, text="Remember me", variable=remember_me_var,
+                                        font=("Segoe UI", 10),
+                                        bg=self.app.colors["bg"], fg=self.app.colors["text_primary"])
+        remember_me_cb.pack(anchor="w", pady=(0, 10))
 
         def do_login(event=None):
             user = username_entry.get().strip()
@@ -128,6 +136,8 @@ class AppAuth:
             success, msg, _ = self.auth_manager.login_user(user, pwd)
             if success:
                 self.app.username = user
+                # Save session if Remember Me is checked
+                session_storage.save_session(user, remember_me_var.get())
                 self._load_user_settings(user)
                 login_win.destroy()
                 self._post_login_init()
@@ -416,8 +426,19 @@ class AppAuth:
             self.logger.error(f"Error loading settings: {e}")
 
     def start_login_flow(self):
-        """Start the login flow"""
-        self.app.root.after(100, self.show_login_screen)
+        """Start the login flow - check for saved session first"""
+        # Check for saved session (Remember Me)
+        saved_username = session_storage.get_saved_username()
+        if saved_username:
+            # Auto-login with saved session
+            self.logger.info(f"Auto-login with saved session for: {saved_username}")
+            self.app.username = saved_username
+            self.auth_manager.current_user = saved_username
+            self._load_user_settings(saved_username)
+            self.app.root.after(100, self._post_login_init)
+        else:
+            # Show login screen
+            self.app.root.after(100, self.show_login_screen)
 
     def _post_login_init(self):
         """Initialize UI after login"""

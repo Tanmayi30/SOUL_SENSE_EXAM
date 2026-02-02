@@ -81,6 +81,23 @@ export const passwordChangeSchema = z
     path: ['confirmNewPassword'],
   });
 
+// Contact Us schema
+export const contactSchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(100, 'Name must be at most 100 characters'),
+  email: emailSchema,
+  subject: z
+    .string()
+    .min(5, 'Subject must be at least 5 characters')
+    .max(200, 'Subject must be at most 200 characters'),
+  message: z
+    .string()
+    .min(10, 'Message must be at least 10 characters')
+    .max(2000, 'Message must be at most 2000 characters'),
+});
+
 // Async validation for uniqueness (placeholder - implement with API calls)
 export const asyncEmailUnique = async (email: string): Promise<boolean> => {
   // Simulate API call

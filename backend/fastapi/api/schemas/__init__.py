@@ -42,6 +42,18 @@ class UserLogin(BaseModel):
     password: str
 
 
+class PasswordResetRequest(BaseModel):
+    """Schema for requesting a password reset."""
+    email: EmailStr = Field(..., description="User's registered email")
+
+
+class PasswordResetComplete(BaseModel):
+    """Schema for completing password reset."""
+    email: EmailStr
+    otp_code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code")
+    new_password: str = Field(..., min_length=8, description="New password")
+
+
 class Token(BaseModel):
     """Schema for JWT token response."""
     access_token: str

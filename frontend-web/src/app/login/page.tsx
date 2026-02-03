@@ -17,18 +17,14 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
-  const { login, isLoading } = useAuth();
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const { login } = useAuth();
 
-  const handleSubmit = async (data: LoginFormData) => {
-    try {
-      await login(data.email, !!data.rememberMe);
-    } catch (error) {
-      console.error('Login error:', error);
-      // TODO: Show error toast
   const handleSubmit = async (data: LoginFormData, methods: UseFormReturn<LoginFormData>) => {
-    setIsLoading(true);
+    setIsLoggingIn(true);
     try {
       const formData = new URLSearchParams();
+      // loginSchema uses 'identifier'
       formData.append('username', data.identifier);
       formData.append('password', data.password);
 
@@ -56,15 +52,18 @@ export default function LoginPage() {
 
       const result = await response.json();
       console.log('Login successful:', result);
-      // TODO: Save token and redirect to dashboard
+      // TODO: Use useAuth's session handling logic here if possible,
+      // but for now following the existing redirect logic
       window.location.href = '/dashboard';
     } catch (error) {
       console.error('Login error:', error);
       alert(error instanceof Error ? error.message : 'Invalid credentials');
     } finally {
-      setIsLoading(false);
+      setIsLoggingIn(false);
     }
   };
+
+  const isLoading = isLoggingIn; // Alias for the UI
 
   return (
     <AuthLayout title="Welcome back" subtitle="Enter your credentials to access your account">
@@ -195,13 +194,13 @@ function FormKeyboardListener({ reset }: { reset: (values?: any) => void }) {
         e.preventDefault();
         // Clear all fields to empty strings
         reset({
-          email: "",
-          password: "",
-          rememberMe: false
+          email: '',
+          password: '',
+          rememberMe: false,
         });
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [reset]);

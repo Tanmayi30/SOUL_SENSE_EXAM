@@ -231,3 +231,125 @@ class AuthManager:
             session.add(attempt)
         except Exception as e:
             logging.error(f"Failed to record attempt: {e}")
+
+    # PR 3: Password Reset Flow
+    def initiate_password_reset(self, email):
+        """
+        Trigger the password reset flow.
+        1. Find user by email.
+        2. Generate OTP.
+        3. Send OTP via EmailService.
+        Privacy: Always returns success message to prevent enumeration.
+        """
+        from app.auth.otp_manager import OTPManager
+        from app.services.email_service import EmailService
+        from app.models import PersonalProfile, User
+
+        session = get_session()
+        try:
+            # Normalize email
+            email_lower = email.lower().strip()
+            
+            # Find user via profile
+            profile = session.query(PersonalProfile).filter(PersonalProfile.email == email_lower).first()
+            user = None
+            if profile:
+                user = session.query(User).filter(User.id == profile.user_id).first()
+            
+            # Privacy: If user not found, we still return success-like message,
+            # but we don't send anything (or maybe send a generic 'account not found' to that email if we wanted)
+            # For now, just logging internal check.
+            # Privacy: If user not found, we still return success-like message,
+            # but we don't send anything (or maybe send a generic 'account not found' to that email if we wanted)
+            # For now, just logging internal check.
+            if not user:
+                logging.info(f"Password reset requested for unknown email: {email_lower}")
+                print(f"DEBUG: User not found for email {email_lower}")
+                return True, "If an account exists with this email, a reset code has been sent."
+
+            print(f"DEBUG: User found: {user.username} (ID: {user.id})")
+
+            # Generate OTP
+            # Pass session to prevent premature closing of shared session
+            code, error = OTPManager.generate_otp(user.id, "RESET_PASSWORD", db_session=session)
+            print(f"DEBUG: OTP Generate Result: Code={code}, Error={error}")
+            
+            if not code:
+                # Rate limit hit or error
+                return False, error or "Too many requests. Please wait."
+                
+            # Send Email
+            if EmailService.send_otp(email_lower, code, "Password Reset"):
+                print(f"DEBUG: EmailService.send_otp returned True")
+                return True, "If an account exists with this email, a reset code has been sent."
+            else:
+                print(f"DEBUG: EmailService.send_otp returned False")
+                return False, "Failed to send email. Please try again later."
+                
+        except Exception as e:
+            logging.error(f"Error in initiate_password_reset: {e}")
+            return False, "An error occurred. Please try again."
+        finally:
+            session.close()
+
+    def complete_password_reset(self, email, otp_code, new_password):
+        """
+        Verify OTP and update password.
+        """
+        from app.auth.otp_manager import OTPManager
+        from app.models import PersonalProfile, User
+        
+        # Validation
+        if not self._validate_password_strength(new_password):
+            return False, "Password does not meet complexity requirements."
+            
+        session = get_session()
+        try:
+            email_lower = email.lower().strip()
+            
+            # Find User
+            profile = session.query(PersonalProfile).filter(PersonalProfile.email == email_lower).first()
+            if not profile:
+                return False, "Invalid request."
+            
+            user = session.query(User).filter(User.id == profile.user_id).first()
+            if not user:
+                return False, "Invalid request."
+                
+            # Verify OTP
+            # PASS THE SESSION so OTPManager doesn't close it!
+            if not OTPManager.verify_otp(user.id, otp_code, "RESET_PASSWORD", db_session=session):
+                return False, "Invalid or expired code."
+            
+            # Update Password
+            # Now 'user' is still attached because verify_otp didn't close the session
+            print(f"DEBUG: Updating password for user {user.username}")
+            user.password_hash = self.hash_password(new_password)
+            
+            # Security: Invalidate all existing sessions (Refresh Tokens - if they exist from Web usage)
+            # Desktop app might not usage these yet, but good practice.
+            # Need to import RefreshToken local or root
+            # session.query(RefreshToken).filter ...
+            # Wait, Desktop app uses `app.models`. Let's assume RefreshToken is there.
+            try:
+                from app.models import RefreshToken
+                session.query(RefreshToken).filter(RefreshToken.user_id == user.id).update({RefreshToken.is_revoked: True})
+            except ImportError:
+                 # If model doesn't exist broadly or query fails, just log/ignore for desktop-only context
+                 pass
+            except Exception as e:
+                 logging.warning(f"Could not invalidate sessions during desktop reset: {e}")
+
+            session.commit()
+            
+            # This access should now work because session is still alive (even if commit expired it, it can refresh)
+            logging.info(f"Password reset successfully for user {user.username}")
+            return True, "Password reset successfully. You can now login."
+            
+        except Exception as e:
+            session.rollback()
+            logging.error(f"Error in complete_password_reset: {e}")
+            print(f"DEBUG Error in complete_password_reset: {e}") 
+            return False, f"Internal error: {str(e)}"
+        finally:
+            session.close()

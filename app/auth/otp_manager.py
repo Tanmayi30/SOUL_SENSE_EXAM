@@ -24,20 +24,22 @@ class OTPManager:
         return hashlib.sha256(code.encode()).hexdigest()
 
     @classmethod
-    def generate_otp(cls, user_id: int, purpose: str) -> tuple[str, str]:
+    def generate_otp(cls, user_id: int, purpose: str, db_session=None) -> tuple[str, str]:
         """
         Generate a new OTP for a user.
         
         Args:
             user_id: The user ID
             purpose: The type of OTP (e.g., 'RESET_PASSWORD')
+            db_session: Optional existing DB session to use
             
         Returns:
             tuple: (raw_code, error_message)
-            If successful, raw_code is the 6-digit string, error is None.
-            If failed (rate limit), raw_code is None, error is description.
         """
-        session = get_session()
+        session = db_session if db_session else get_session()
+        # Track if we own the session and should close it
+        should_close = db_session is None
+        
         try:
             # 1. Rate Limiting Check
             last_otp = session.query(OTP).filter(
@@ -66,6 +68,9 @@ class OTPManager:
                 attempts=0
             )
             session.add(new_otp)
+            # Only commit if we own the session or if explicitly needed?
+            # Ideally verify_otp commits its own change. 
+            # But generate_otp needs to save the OTP.
             session.commit()
             
             logger.info(f"Generated OTP for user {user_id} (Type: {purpose})")
@@ -76,23 +81,23 @@ class OTPManager:
             logger.error(f"Failed to generate OTP: {e}")
             return None, "Internal error generating code."
         finally:
-            session.close()
+            if should_close:
+                session.close()
 
     @classmethod
-    def verify_otp(cls, user_id: int, code: str, purpose: str) -> bool:
+    def verify_otp(cls, user_id: int, code: str, purpose: str, db_session=None) -> bool:
         """
         Verify an OTP code.
         INVALIDATES the OTP if successful (is_used=True).
         Increments attempt count on failure.
         """
-        session = get_session()
+        session = db_session if db_session else get_session()
+        should_close = db_session is None
+        
         try:
             input_hash = cls._hash_code(code)
             
             # Find the valid OTP
-            # Must be: Same User, Same Type, Not Used, Not Expired
-            # We fetch the latest one usually, strictly speaking any valid one functions if multiple exist?
-            # Typically enforce latest.
             otp = session.query(OTP).filter(
                 OTP.user_id == user_id,
                 OTP.type == purpose,
@@ -122,8 +127,11 @@ class OTPManager:
                 return False
                 
         except Exception as e:
+            # Only roll back our transaction part? 
+            # If we share session, rollback rolls back everything.
             session.rollback()
             logger.error(f"Error validating OTP: {e}")
             return False
         finally:
-            session.close()
+            if should_close:
+                session.close()

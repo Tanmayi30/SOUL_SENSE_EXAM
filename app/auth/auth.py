@@ -243,12 +243,20 @@ class AuthManager:
             # Privacy: If user not found, we still return success-like message,
             # but we don't send anything (or maybe send a generic 'account not found' to that email if we wanted)
             # For now, just logging internal check.
+            # Privacy: If user not found, we still return success-like message,
+            # but we don't send anything (or maybe send a generic 'account not found' to that email if we wanted)
+            # For now, just logging internal check.
             if not user:
                 logging.info(f"Password reset requested for unknown email: {email_lower}")
+                print(f"DEBUG: User not found for email {email_lower}")
                 return True, "If an account exists with this email, a reset code has been sent."
 
+            print(f"DEBUG: User found: {user.username} (ID: {user.id})")
+
             # Generate OTP
-            code, error = OTPManager.generate_otp(user.id, "RESET_PASSWORD")
+            # Pass session to prevent premature closing of shared session
+            code, error = OTPManager.generate_otp(user.id, "RESET_PASSWORD", db_session=session)
+            print(f"DEBUG: OTP Generate Result: Code={code}, Error={error}")
             
             if not code:
                 # Rate limit hit or error
@@ -256,8 +264,10 @@ class AuthManager:
                 
             # Send Email
             if EmailService.send_otp(email_lower, code, "Password Reset"):
+                print(f"DEBUG: EmailService.send_otp returned True")
                 return True, "If an account exists with this email, a reset code has been sent."
             else:
+                print(f"DEBUG: EmailService.send_otp returned False")
                 return False, "Failed to send email. Please try again later."
                 
         except Exception as e:
@@ -291,19 +301,39 @@ class AuthManager:
                 return False, "Invalid request."
                 
             # Verify OTP
-            if not OTPManager.verify_otp(user.id, otp_code, "RESET_PASSWORD"):
+            # PASS THE SESSION so OTPManager doesn't close it!
+            if not OTPManager.verify_otp(user.id, otp_code, "RESET_PASSWORD", db_session=session):
                 return False, "Invalid or expired code."
             
             # Update Password
+            # Now 'user' is still attached because verify_otp didn't close the session
+            print(f"DEBUG: Updating password for user {user.username}")
             user.password_hash = self.hash_password(new_password)
+            
+            # Security: Invalidate all existing sessions (Refresh Tokens - if they exist from Web usage)
+            # Desktop app might not usage these yet, but good practice.
+            # Need to import RefreshToken local or root
+            # session.query(RefreshToken).filter ...
+            # Wait, Desktop app uses `app.models`. Let's assume RefreshToken is there.
+            try:
+                from app.models import RefreshToken
+                session.query(RefreshToken).filter(RefreshToken.user_id == user.id).update({RefreshToken.is_revoked: True})
+            except ImportError:
+                 # If model doesn't exist broadly or query fails, just log/ignore for desktop-only context
+                 pass
+            except Exception as e:
+                 logging.warning(f"Could not invalidate sessions during desktop reset: {e}")
+
             session.commit()
             
+            # This access should now work because session is still alive (even if commit expired it, it can refresh)
             logging.info(f"Password reset successfully for user {user.username}")
             return True, "Password reset successfully. You can now login."
             
         except Exception as e:
             session.rollback()
             logging.error(f"Error in complete_password_reset: {e}")
-            return False, "Internal error."
+            print(f"DEBUG Error in complete_password_reset: {e}") 
+            return False, f"Internal error: {str(e)}"
         finally:
             session.close()

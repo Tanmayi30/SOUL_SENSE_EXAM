@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 
 from ..config import get_settings
-from ..schemas import UserCreate, Token, UserResponse, ErrorResponse
+from ..schemas import UserCreate, Token, UserResponse, ErrorResponse, PasswordResetRequest, PasswordResetComplete
 from ..services.db_service import get_db
 from ..services.auth_service import AuthService
 from ..constants.errors import ErrorCode
@@ -128,3 +128,43 @@ async def logout(
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]):
     return UserResponse(id=current_user.id, username=current_user.username, created_at=current_user.created_at)
+
+
+@router.post("/password-reset/initiate")
+async def initiate_password_reset(
+    request: PasswordResetRequest,
+    auth_service: AuthService = Depends()
+):
+    """
+    Initiate the password reset flow.
+    ALWAYS returns success message to prevent user enumeration.
+    """
+    success, message = auth_service.initiate_password_reset(request.email)
+    if not success:
+        # Rate limit or server error
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+    return {"message": message}
+
+
+@router.post("/password-reset/complete")
+async def complete_password_reset(
+    request: PasswordResetComplete,
+    auth_service: AuthService = Depends()
+):
+    """
+    Verify OTP and set new password.
+    """
+    success, message = auth_service.complete_password_reset(
+        request.email, 
+        request.otp_code, 
+        request.new_password
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message
+        )
+    return {"message": message}

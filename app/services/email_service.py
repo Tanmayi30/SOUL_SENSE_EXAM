@@ -1,4 +1,7 @@
 import logging
+import datetime
+import tkinter as tk
+from tkinter import messagebox
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +49,22 @@ class EmailService:
             # Print to stdout for CLI visibility and log to file
             print(log_msg) 
             logger.info(f"Mock email sent to {to_email} with code {code}")
+            
+            # Write to a debug file to guarantee visibility
+            try:
+                with open("otp_debug.txt", "a") as f:
+                    f.write(f"To: {to_email} | Code: {code} | Time: {datetime.datetime.now()}\n")
+            except Exception as file_err:
+                print(f"DEBUG: Failed to write to otp_debug.txt: {file_err}")
+                
             return True
             
         except Exception as e:
             logger.error(f"Failed to send mock email: {e}")
+            # Try to log to file even on error
+            try:
+                with open("otp_debug.txt", "a") as f:
+                    f.write(f"ERROR Sending to {to_email}: {e}\n")
+            except:
+                pass
             return False

@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox as tmb
 from app import auth
 from app.auth import session_storage
 from app.logger import get_logger
@@ -62,16 +63,17 @@ class AppAuth:
     def show_login_screen(self):
         """Show login popup on startup"""
         login_win = tk.Toplevel(self.app.root)
+        self.login_window = login_win # Store reference for other methods
         login_win.title("SoulSense Login")
         
         # Responsive sizing
         screen_width = login_win.winfo_screenwidth()
         screen_height = login_win.winfo_screenheight()
         window_width = min(400, int(screen_width * 0.3))
-        window_height = min(520, int(screen_height * 0.5))
+        window_height = min(600, int(screen_height * 0.6)) # Increased height
         
         login_win.geometry(f"{window_width}x{window_height}")
-        login_win.minsize(350, 450)
+        login_win.minsize(350, 550) # Increased min height from 450 to 550
         login_win.resizable(True, True)
         login_win.configure(bg=self.app.colors["bg"])
         login_win.transient(self.app.root)
@@ -152,7 +154,7 @@ class AppAuth:
             pwd = password_entry.get().strip()
 
             if not user or not pwd:
-                tk.messagebox.showerror("Error", "Please enter username and password")
+                tmb.showerror("Error", "Please enter username and password")
                 return
 
             success, msg, _ = self.auth_manager.login_user(user, pwd)
@@ -164,7 +166,7 @@ class AppAuth:
                 login_win.destroy()
                 self._post_login_init()
             else:
-                tk.messagebox.showerror("Login Failed", msg)
+                tmb.showerror("Login Failed", msg)
 
         # Added this function for the Esc key
         def clear_fields(event=None):
@@ -230,16 +232,16 @@ class AppAuth:
         def on_send():
             email = email_var.get()
             if not email:
-                messagebox.showerror("Error", "Please enter your email.")
+                tmb.showerror("Error", "Please enter your email.")
                 return
                 
             success, msg = self.auth_manager.initiate_password_reset(email)
             if success:
-                messagebox.showinfo("Success", msg)
+                tmb.showinfo("Success", msg)
                 fp_window.destroy()
                 self.show_verify_otp(email)
             else:
-                messagebox.showerror("Error", msg)
+                tmb.showerror("Error", msg)
         
         tk.Button(fp_window, text="Send Code", command=on_send, 
                  bg=self.app.colors["primary"], fg="white", font=("Segoe UI", 10, "bold"), 
@@ -277,7 +279,7 @@ class AppAuth:
         def on_verify():
             code = code_var.get()
             if len(code) != 6:
-                messagebox.showerror("Error", "Code must be 6 digits.")
+                tmb.showerror("Error", "Code must be 6 digits.")
                 return
             
             # We don't verify against server just yet, we pass code to next step?
@@ -292,7 +294,13 @@ class AppAuth:
 
         tk.Button(otp_window, text="Verify", command=on_verify, 
                  bg=self.app.colors["primary"], fg="white", font=("Segoe UI", 10, "bold"), 
-                 padx=20, pady=5).pack(pady=20)
+                 padx=20, pady=5).pack(pady=(20, 10))
+                 
+        # Change Email option
+        tk.Button(otp_window, text="Change Email", 
+                 command=lambda: [otp_window.destroy(), self.show_forgot_password()],
+                 bg=self.app.colors["bg"], fg=self.app.colors["primary"],
+                 font=("Segoe UI", 9), relief="flat", cursor="hand2").pack(pady=(0, 20))
 
     def show_reset_password_dialog(self, email, code):
         """Show New Password Dialog"""
@@ -329,11 +337,11 @@ class AppAuth:
             new_pass = pass_var.get()
             success, msg = self.auth_manager.complete_password_reset(email, code, new_pass)
             if success:
-                messagebox.showinfo("Success", msg)
+                tmb.showinfo("Success", msg)
                 reset_window.destroy()
                 self.show_login_screen()
             else:
-                messagebox.showerror("Error", msg)
+                tmb.showerror("Error", msg)
                 # If code is invalid, might need to restart flow
                 if "expired" in msg.lower():
                     reset_window.destroy()
@@ -547,29 +555,29 @@ class AppAuth:
                 email_entry.focus_set()
                 return
             if not age_str:
-                tk.messagebox.showerror("Error", "Age is required")
+                tmb.showerror("Error", "Age is required")
                 return
             if not age_str.isdigit():
-                tk.messagebox.showerror("Error", "Age must be a number")
+                tmb.showerror("Error", "Age must be a number")
                 return
             age = int(age_str)
             if age < 13 or age > 120:
-                tk.messagebox.showerror("Error", "Age must be between 13 and 120")
+                tmb.showerror("Error", "Age must be between 13 and 120")
                 return
             if not password:
-                tk.messagebox.showerror("Error", "Password is required")
+                tmb.showerror("Error", "Password is required")
                 return
             if password != confirm_password:
-                tk.messagebox.showerror("Error", "Passwords do not match")
+                tmb.showerror("Error", "Passwords do not match")
                 return
 
             # Register user
             success, msg, _ = self.auth_manager.register_user(username, email, first_name, last_name, age, gender, password)
             if success:
-                tk.messagebox.showinfo("Success", "Account created successfully! You can now login.")
+                tmb.showinfo("Success", "Account created successfully! You can now login.")
                 signup_win.destroy()
             else:
-                tk.messagebox.showerror("Registration Failed", msg)
+                tmb.showerror("Registration Failed", msg)
 
         # Buttons with modern styling
         button_frame = tk.Frame(content_frame, bg=self.app.colors["bg"])

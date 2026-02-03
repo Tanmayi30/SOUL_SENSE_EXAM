@@ -81,6 +81,21 @@ export const passwordChangeSchema = z
     path: ['confirmNewPassword'],
   });
 
+// Password reset verify schema
+export const resetPasswordSchema = z
+  .object({
+    email: emailSchema,
+    otp: z.string().length(6, 'Code must be exactly 6 digits'),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ['confirmPassword'],
+  });
+
+export type PasswordResetComplete = z.infer<typeof resetPasswordSchema>;
+
 // Contact Us schema
 export const contactSchema = z.object({
   name: z

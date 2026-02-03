@@ -273,3 +273,87 @@ class AuthService:
             db_token.is_revoked = True
             self.db.commit()
             logger.info(f"Revoked refresh token for user_id={db_token.user_id}")
+
+    def initiate_password_reset(self, email: str) -> tuple[bool, str]:
+        """
+        Initiate password reset flow:
+        1. Find user by email.
+        2. Generate OTP.
+        3. Send OTP (Mock).
+        """
+        from app.auth.otp_manager import OTPManager
+        from app.services.email_service import EmailService
+
+        try:
+            email_lower = email.lower().strip()
+            
+            # Find User via PersonalProfile
+            profile = self.db.query(PersonalProfile).filter(PersonalProfile.email == email_lower).first()
+            user = None
+            if profile:
+                user = self.db.query(User).filter(User.id == profile.user_id).first()
+            
+            # Privacy: If user not found, return success-like message
+            if not user:
+                logger.info(f"Password reset requested for unknown email: {email_lower}")
+                return True, "If an account exists with this email, a reset code has been sent."
+
+            # Generate OTP
+            # Pass our session to prevent premature closing
+            code, error = OTPManager.generate_otp(user.id, "RESET_PASSWORD", db_session=self.db)
+            
+            if not code:
+                return False, error or "Too many requests. Please wait."
+                
+            # Send Email
+            if EmailService.send_otp(email_lower, code, "Password Reset"):
+                return True, "If an account exists with this email, a reset code has been sent."
+            else:
+                return False, "Failed to send email. Please try again later."
+                
+        except Exception as e:
+            logger.error(f"Error in initiate_password_reset: {e}")
+            return False, "An error occurred. Please try again."
+
+    def complete_password_reset(self, email: str, otp_code: str, new_password: str) -> tuple[bool, str]:
+        """
+        Complete password reset flow:
+        1. Verify OTP.
+        2. Update Password.
+        """
+        from app.auth.otp_manager import OTPManager
+        
+        try:
+            email_lower = email.lower().strip()
+            
+            # Find User
+            profile = self.db.query(PersonalProfile).filter(PersonalProfile.email == email_lower).first()
+            if not profile:
+                return False, "Invalid request."
+            
+            user = self.db.query(User).filter(User.id == profile.user_id).first()
+            if not user:
+                return False, "Invalid request."
+                
+            # Verify OTP
+            # Pass our session so OTPManager doesn't close it
+            if not OTPManager.verify_otp(user.id, otp_code, "RESET_PASSWORD", db_session=self.db):
+                return False, "Invalid or expired code."
+            
+            # Update Password
+            # 'user' is still attached
+            user.password_hash = self.hash_password(new_password)
+            
+            # Security: Invalidate all existing sessions (Refresh Tokens)
+            # This ensures that if the account was compromised, the attacker is logged out everywhere.
+            self.db.query(RefreshToken).filter(RefreshToken.user_id == user.id).update({RefreshToken.is_revoked: True})
+            
+            self.db.commit()
+            
+            logger.info(f"Password reset successfully for user {user.username} (via Web). Sessions invalidated.")
+            return True, "Password reset successfully. You can now login."
+            
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error in complete_password_reset: {e}")
+            return False, f"Internal error: {str(e)}"

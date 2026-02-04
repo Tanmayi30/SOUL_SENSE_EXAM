@@ -1,7 +1,7 @@
 # app/ui/dashboard.py - FIXED VERSION
 import tkinter as tk
 from tkinter import ttk
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import Counter
 import matplotlib
 matplotlib.use("Agg") # Prevent GUI mainloop conflicts

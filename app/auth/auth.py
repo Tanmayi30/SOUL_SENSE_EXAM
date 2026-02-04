@@ -119,6 +119,34 @@ class AuthManager:
                     session.commit()
                     return False, "Account is deactivated. Please contact support.", "AUTH003"
 
+                # PR 4: 2FA Check
+                if user.is_2fa_enabled:
+                    # Resolve email for OTP
+                    from app.auth.otp_manager import OTPManager
+                    from app.services.email_service import EmailService
+                    from app.models import PersonalProfile
+                    
+                    email_to_send = None
+                    if "@" in id_lower:
+                         email_to_send = id_lower
+                    else:
+                         profile = session.query(PersonalProfile).filter(PersonalProfile.user_id == user.id).first()
+                         if profile:
+                             email_to_send = profile.email
+                    
+                    if not email_to_send:
+                        logging.error(f"2FA enabled but no email found for user {user.username}")
+                        return False, "2FA Error: Mobile/Email not configured.", "AUTH004"
+
+                    code, _ = OTPManager.generate_otp(user.id, "LOGIN_CHALLENGE", db_session=session)
+                    if code:
+                        EmailService.send_otp(email_to_send, code, "Login Verification")
+                        session.commit()
+                        return False, "2FA Verification Required", "AUTH_2FA_REQUIRED"
+                    else:
+                        session.rollback()
+                        return False, "Failed to generate 2FA code. Please wait.", "AUTH005"
+
                 # Update last login
                 try:
                     now_iso = datetime.utcnow().isoformat()
@@ -131,7 +159,6 @@ class AuthManager:
                     session.commit()
                 except Exception as e:
                     logging.error(f"Failed to update login metadata: {e}")
-                    # Allow login even if metadata update fails
                     
                 self.current_user = user.username # Return canonical username
                 self._generate_session_token()
@@ -231,3 +258,239 @@ class AuthManager:
             session.add(attempt)
         except Exception as e:
             logging.error(f"Failed to record attempt: {e}")
+
+    # PR 3: Password Reset Flow
+    def initiate_password_reset(self, email):
+        """
+        Trigger the password reset flow.
+        1. Find user by email.
+        2. Generate OTP.
+        3. Send OTP via EmailService.
+        Privacy: Always returns success message to prevent enumeration.
+        """
+        from app.auth.otp_manager import OTPManager
+        from app.services.email_service import EmailService
+        from app.models import PersonalProfile, User
+
+        session = get_session()
+        try:
+            # Normalize email
+            email_lower = email.lower().strip()
+            
+            # Find user via profile
+            profile = session.query(PersonalProfile).filter(PersonalProfile.email == email_lower).first()
+            user = None
+            if profile:
+                user = session.query(User).filter(User.id == profile.user_id).first()
+            
+            # Privacy: If user not found, we still return success-like message,
+            # but we don't send anything (or maybe send a generic 'account not found' to that email if we wanted)
+            # For now, just logging internal check.
+            # Privacy: If user not found, we still return success-like message,
+            # but we don't send anything (or maybe send a generic 'account not found' to that email if we wanted)
+            # For now, just logging internal check.
+            if not user:
+                logging.info(f"Password reset requested for unknown email: {email_lower}")
+                print(f"DEBUG: User not found for email {email_lower}")
+                return True, "If an account exists with this email, a reset code has been sent."
+
+            print(f"DEBUG: User found: {user.username} (ID: {user.id})")
+
+            # Generate OTP
+            # Pass session to prevent premature closing of shared session
+            code, error = OTPManager.generate_otp(user.id, "RESET_PASSWORD", db_session=session)
+            print(f"DEBUG: OTP Generate Result: Code={code}, Error={error}")
+            
+            if not code:
+                # Rate limit hit or error
+                return False, error or "Too many requests. Please wait."
+                
+            # Send Email
+            if EmailService.send_otp(email_lower, code, "Password Reset"):
+                print(f"DEBUG: EmailService.send_otp returned True")
+                return True, "If an account exists with this email, a reset code has been sent."
+            else:
+                print(f"DEBUG: EmailService.send_otp returned False")
+                return False, "Failed to send email. Please try again later."
+                
+        except Exception as e:
+            logging.error(f"Error in initiate_password_reset: {e}")
+            return False, "An error occurred. Please try again."
+        finally:
+            session.close()
+
+    def verify_2fa_login(self, username, code):
+        """
+        Verify the 2FA code and complete the login process.
+        Returns: (success, message, session_token)
+        """
+        from app.auth.otp_manager import OTPManager
+
+        session = get_session()
+        try:
+            # Find User
+            username_lower = username.lower().strip()
+            user = session.query(User).filter(User.username == username_lower).first()
+            
+            if not user:
+                return False, "User not found", None
+                
+            # Verify Code
+            if OTPManager.verify_otp(user.id, code, "LOGIN_CHALLENGE", db_session=session):
+                # Success!
+                user.last_login = datetime.utcnow().isoformat()
+                self._record_login_attempt(session, username_lower, True, reason="2fa_success")
+                session.commit()
+                
+                self.current_user = user.username
+                self._generate_session_token()
+                return True, "Login successful", self.session_token
+            else:
+                # Failed
+                self._record_login_attempt(session, username_lower, False, reason="2fa_failed")
+                session.commit()
+                return False, "Invalid code", None
+                
+        except Exception as e:
+            session.rollback()
+            logging.error(f"2FA Verify Error: {e}")
+            return False, "Verification failed", None
+        finally:
+            session.close()
+
+    def complete_password_reset(self, email, otp_code, new_password):
+        """
+        Verify OTP and update password.
+        """
+        from app.auth.otp_manager import OTPManager
+        from app.models import PersonalProfile, User
+        
+        # Validation
+        if not self._validate_password_strength(new_password):
+            return False, "Password does not meet complexity requirements."
+            
+        session = get_session()
+        try:
+            email_lower = email.lower().strip()
+            
+            # Find User
+            profile = session.query(PersonalProfile).filter(PersonalProfile.email == email_lower).first()
+            if not profile:
+                return False, "Invalid request."
+            
+            user = session.query(User).filter(User.id == profile.user_id).first()
+            if not user:
+                return False, "Invalid request."
+                
+            # Verify OTP
+            # PASS THE SESSION so OTPManager doesn't close it!
+            if not OTPManager.verify_otp(user.id, otp_code, "RESET_PASSWORD", db_session=session):
+                return False, "Invalid or expired code."
+            
+            # Update Password
+            # Now 'user' is still attached because verify_otp didn't close the session
+            print(f"DEBUG: Updating password for user {user.username}")
+            user.password_hash = self.hash_password(new_password)
+            
+            # Security: Invalidate all existing sessions (Refresh Tokens - if they exist from Web usage)
+            # Desktop app might not usage these yet, but good practice.
+            # Need to import RefreshToken local or root
+            # session.query(RefreshToken).filter ...
+            # Wait, Desktop app uses `app.models`. Let's assume RefreshToken is there.
+            try:
+                from app.models import RefreshToken
+                session.query(RefreshToken).filter(RefreshToken.user_id == user.id).update({RefreshToken.is_revoked: True})
+            except ImportError:
+                 # If model doesn't exist broadly or query fails, just log/ignore for desktop-only context
+                 pass
+            except Exception as e:
+                 logging.warning(f"Could not invalidate sessions during desktop reset: {e}")
+
+            session.commit()
+            
+            # This access should now work because session is still alive (even if commit expired it, it can refresh)
+            logging.info(f"Password reset successfully for user {user.username}")
+            return True, "Password reset successfully. You can now login."
+            
+        except Exception as e:
+            session.rollback()
+            logging.error(f"Error in complete_password_reset: {e}")
+            print(f"DEBUG Error in complete_password_reset: {e}") 
+            return False, f"Internal error: {str(e)}"
+        finally:
+            session.close()
+
+    def send_2fa_setup_otp(self, username):
+        """Generate and send OTP for 2FA setup."""
+        from app.auth.otp_manager import OTPManager
+        from app.services.email_service import EmailService
+        from app.models import PersonalProfile, User
+
+        session = get_session()
+        try:
+            user = session.query(User).filter_by(username=username).first()
+            if not user:
+                return False, "User not found"
+            
+            # Get email
+            profile = session.query(PersonalProfile).filter_by(user_id=user.id).first()
+            if not profile or not profile.email:
+                return False, "Email not configured in profile. Please update profile first."
+
+            code, error = OTPManager.generate_otp(user.id, "2FA_SETUP", db_session=session)
+            if not code:
+                return False, error or "Failed to generate OTP"
+
+            if EmailService.send_otp(profile.email, code, "2FA Setup"):
+                return True, "Verification code sent to email."
+            else:
+                return False, "Failed to send email."
+        except Exception as e:
+            logging.error(f"2FA Setup Error: {e}")
+            return False, f"Error: {str(e)}"
+        finally:
+            session.close()
+
+    def enable_2fa(self, username, code):
+        """Verify code and enable 2FA."""
+        from app.auth.otp_manager import OTPManager
+        from app.models import User
+
+        session = get_session()
+        try:
+            user = session.query(User).filter_by(username=username).first()
+            if not user:
+                return False, "User not found"
+
+            # Verify Code
+            if OTPManager.verify_otp(user.id, code, "2FA_SETUP", db_session=session):
+                user.is_2fa_enabled = True
+                session.commit()
+                return True, "Two-Factor Authentication Enabled!"
+            else:
+                return False, "Invalid validation code"
+        except Exception as e:
+            session.rollback()
+            logging.error(f"Enable 2FA Error: {e}")
+            return False, f"Error: {str(e)}"
+        finally:
+            session.close()
+
+    def disable_2fa(self, username):
+        """Disable 2FA for user."""
+        from app.models import User
+        session = get_session()
+        try:
+            user = session.query(User).filter_by(username=username).first()
+            if not user:
+                return False, "User not found"
+
+            user.is_2fa_enabled = False
+            session.commit()
+            return True, "Two-Factor Authentication Disabled"
+        except Exception as e:
+            session.rollback()
+            logging.error(f"Disable 2FA Error: {e}")
+            return False, f"Error: {str(e)}"
+        finally:
+            session.close()

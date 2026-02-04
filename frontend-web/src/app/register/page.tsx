@@ -17,17 +17,9 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const [isLoading, setIsLoading] = useState(false);
-
   const handleSubmit = async (data: RegisterFormData, methods: UseFormReturn<RegisterFormData>) => {
     setIsLoading(true);
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log('Register data:', data);
-      // TODO: Implement actual registration logic
-    } catch (error) {
-      console.error('Registration error:', error);
       const response = await fetch('http://localhost:8000/api/v1/auth/register', {
         method: 'POST',
         headers: {
@@ -215,17 +207,56 @@ export default function RegisterPage() {
                   />
                 )}
               </FormField>
-              <div className="flex items-center space-x-2 mb-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="text-sm"
-                >
-                  {showPassword ? 'Hide Password' : 'Show Password'}
-                </Button>
-              </div>
+            </motion.div>
+            <div className="flex items-center space-x-2 mb-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-sm"
+              >
+                {showPassword ? 'Hide Password' : 'Show Password'}
+              </Button>
+            </div>
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.45 }}
+            >
+              <FormField control={methods.control} name="acceptTerms">
+                {(fieldProps) => (
+                  <div className="flex items-start space-x-3 mb-4">
+                    <input
+                      type="checkbox"
+                      id="acceptTerms"
+                      checked={fieldProps.value || false}
+                      onChange={(e) => fieldProps.onChange(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                    />
+                    <label
+                      htmlFor="acceptTerms"
+                      className="text-sm text-muted-foreground cursor-pointer"
+                    >
+                      I agree to the{' '}
+                      <Link
+                        href="/terms"
+                        className="text-primary hover:text-primary/80 underline"
+                        target="_blank"
+                      >
+                        Terms & Conditions
+                      </Link>
+                    </label>
+                  </div>
+                )}
+              </FormField>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.5 }}
+            >
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
                   <>

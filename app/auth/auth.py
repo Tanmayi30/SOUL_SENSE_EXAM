@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from app.db import get_session
 from app.models import User
 from app.security_config import PASSWORD_HASH_ROUNDS, LOCKOUT_DURATION_MINUTES
+from app.services.audit_service import AuditService
 import logging
 
 class AuthManager:
@@ -83,6 +84,10 @@ class AuthManager:
             session.add(profile)
             
             session.commit()
+            
+            # Audit Log
+            AuditService.log_event(new_user.id, "REGISTER", details={"status": "success", "username": username_lower}, db_session=session)
+            
             return True, "Registration successful", None
 
         except Exception as e:
@@ -154,8 +159,9 @@ class AuthManager:
                     # PR 2: Update last_activity on login (Issue fix)
                     user.last_activity = now_iso
                     
-                    # Audit success
+                    # Audit success (Legacy LoginAttempt + New AuditLog)
                     self._record_login_attempt(session, id_lower, True)
+                    AuditService.log_event(user.id, "LOGIN", details={"method": "password"}, db_session=session)
                     session.commit()
                 except Exception as e:
                     logging.error(f"Failed to update login metadata: {e}")
@@ -182,6 +188,8 @@ class AuthManager:
                 user = session.query(User).filter(User.username == self.current_user).first()
                 if user:
                     user.last_activity = datetime.utcnow().isoformat()
+                    # Audit Logout
+                    AuditService.log_event(user.id, "LOGOUT", db_session=session)
                     session.commit()
                 session.close()
             except Exception as e:
@@ -340,6 +348,7 @@ class AuthManager:
                 # Success!
                 user.last_login = datetime.utcnow().isoformat()
                 self._record_login_attempt(session, username_lower, True, reason="2fa_success")
+                AuditService.log_event(user.id, "LOGIN_2FA", details={"method": "totp"}, db_session=session)
                 session.commit()
                 
                 self.current_user = user.username
@@ -410,6 +419,9 @@ class AuthManager:
             
             # This access should now work because session is still alive (even if commit expired it, it can refresh)
             logging.info(f"Password reset successfully for user {user.username}")
+            
+            AuditService.log_event(user.id, "PASSWORD_RESET", details={"status": "success"}, db_session=session)
+            
             return True, "Password reset successfully. You can now login."
             
         except Exception as e:
@@ -465,6 +477,9 @@ class AuthManager:
             # Verify Code
             if OTPManager.verify_otp(user.id, code, "2FA_SETUP", db_session=session):
                 user.is_2fa_enabled = True
+                
+                AuditService.log_event(user.id, "2FA_ENABLE", details={"method": "OTP"}, db_session=session)
+                
                 session.commit()
                 return True, "Two-Factor Authentication Enabled!"
             else:
@@ -486,6 +501,9 @@ class AuthManager:
                 return False, "User not found"
 
             user.is_2fa_enabled = False
+            
+            AuditService.log_event(user.id, "2FA_DISABLE", db_session=session)
+            
             session.commit()
             return True, "Two-Factor Authentication Disabled"
         except Exception as e:

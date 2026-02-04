@@ -47,6 +47,7 @@ class User(Base):
     emotional_patterns = relationship("UserEmotionalPatterns", uselist=False, back_populates="user", cascade="all, delete-orphan")
     sync_settings = relationship("UserSyncSetting", back_populates="user", cascade="all, delete-orphan")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
 
 
 class LoginAttempt(Base):
@@ -65,6 +66,23 @@ class LoginAttempt(Base):
     # PR 1: Audit Auditing
     user_agent = Column(String, nullable=True)
     failure_reason = Column(String, nullable=True)
+
+class AuditLog(Base):
+    """
+    Audit Log for tracking security-critical user actions.
+    Separated from LoginAttempt to provide a user-facing history.
+    """
+    __tablename__ = 'audit_logs'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    action = Column(String, nullable=False) # LOGIN, LOGOUT, 2FA_UPDATE, PASSWORD_CHANGE
+    ip_address = Column(String, nullable=True, default="SYSTEM")
+    user_agent = Column(String, nullable=True) # Truncated to 255 chars
+    details = Column(Text, nullable=True) # JSON string for additional context (allow-listed fields only)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="audit_logs")
 
 class OTP(Base):
     """

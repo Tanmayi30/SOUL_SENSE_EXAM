@@ -36,7 +36,11 @@ class UserProfileView:
         self.app = app_instance
         self.i18n = app_instance.i18n
         self.colors = app_instance.colors
+        self.colors = app_instance.colors
         self.styles = app_instance.ui_styles
+        
+        # State for auto-refresh
+        self.audit_refresh_job = None
         
         # Embedded View Setup
         # self.window was Toplevel, now we use parent_root (which is content_area)
@@ -58,6 +62,7 @@ class UserProfileView:
                 {"id": "history", "icon": "📜", "label": "Personal History"},
                 {"id": "strengths", "icon": "💪", "label": "Strengths & Goals"},
                 {"id": "export", "icon": "📤", "label": "Data Export"},
+                {"id": "security", "icon": "🔒", "label": "Security Activity"},
                 {"id": "settings", "icon": "⚙️", "label": "Settings"},
             ],
             on_change=self.on_nav_change
@@ -157,6 +162,14 @@ class UserProfileView:
         self.window.geometry(f'{width}x{height}+{x}+{y}')
 
     def on_nav_change(self, view_id: str) -> None:
+        # Cancel any pending auto-refresh stats
+        if hasattr(self, 'audit_refresh_job') and self.audit_refresh_job:
+            try:
+                self.window.after_cancel(self.audit_refresh_job)
+            except Exception:
+                pass
+            self.audit_refresh_job = None
+
         # Clear current view
         for widget in self.view_container.winfo_children():
             widget.destroy()
@@ -183,6 +196,9 @@ class UserProfileView:
         elif view_id == "export":
             self.header_label.configure(text="Data Export")
             self._render_export_view()
+        elif view_id == "security":
+            self.header_label.configure(text="Security Activity")
+            self._render_security_view()
         elif view_id == "settings":
             self.header_label.configure(text="Account Settings")
             self._render_settings_view(self.view_container)
@@ -2383,3 +2399,113 @@ class UserProfileView:
                 "An error occurred while deleting your data. Please contact support.",
                 parent=self.window
             )
+
+    def _render_security_view(self):
+        """Render the Security Activity Log view."""
+        from app.services.audit_service import AuditService
+        from app.models import User
+        
+        # Container
+        container = tk.Frame(self.view_container, bg=self.colors.get("bg"))
+        container.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Header Row (Title + Refresh Button)
+        header_frame = tk.Frame(container, bg=self.colors.get("bg"))
+        header_frame.pack(fill="x", pady=(0, 20))
+
+        # Info Badge
+        info_frame = tk.Frame(header_frame, bg=self.colors.get("card_bg"), padx=15, pady=10)
+        info_frame.pack(side="left", fill="x", expand=True)
+        tk.Label(info_frame, text="🛡️ Audit Log", font=self.styles.get_font("md", "bold"),
+                bg=self.colors.get("card_bg"), fg=self.colors.get("primary")).pack(anchor="w")
+        tk.Label(info_frame, text="Review sensitive actions performed on your account.",
+                font=self.styles.get_font("sm"), bg=self.colors.get("card_bg"), fg="gray").pack(anchor="w")
+
+        # Refresh Button
+        def manual_refresh():
+            self._refresh_security_log(tree)
+
+        refresh_btn = tk.Button(
+            header_frame, 
+            text="↻ Refresh", 
+            bg=self.colors.get("primary"), 
+            fg="white", 
+            font=self.styles.get_font("sm", "bold"),
+            relief="flat",
+            padx=15, 
+            pady=8,
+            command=manual_refresh
+        )
+        refresh_btn.pack(side="right", padx=(10, 0))
+
+        # Table Frame
+        table_frame = tk.Frame(container, bg=self.colors.get("card_bg"))
+        table_frame.pack(fill="both", expand=True)
+
+        # Columns
+        columns = ("timestamp", "action", "ip", "device")
+        
+        # Style definition for Dark Mode compatibility
+        style = ttk.Style()
+        style.configure("Audit.Treeview", 
+            background=self.colors.get("card_bg"),
+            foreground=self.colors.get("text_primary"),
+            fieldbackground=self.colors.get("card_bg"),
+            rowheight=30
+        )
+        style.configure("Audit.Treeview.Heading",
+            background=self.colors.get("bg"),
+            foreground="black" 
+        )
+        
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=15, style="Audit.Treeview")
+        
+        tree.heading("timestamp", text="Time (IST)")
+        tree.heading("action", text="Action")
+        tree.heading("ip", text="IP Address")
+        tree.heading("device", text="Device / Agent")
+        
+        tree.column("timestamp", width=150)
+        tree.column("action", width=120)
+        tree.column("ip", width=100)
+        tree.column("device", width=250)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Start Auto-Refresh Loop
+        self._refresh_security_log(tree)
+
+    def _refresh_security_log(self, tree):
+        """Fetch logs and update table, then schedule next update."""
+        from app.services.audit_service import AuditService
+        from app.models import User
+        
+        # Clear existing items
+        for item in tree.get_children():
+            tree.delete(item)
+            
+        try:
+            with safe_db_context() as session:
+                user = session.query(User).filter_by(username=self.app.username).first()
+                if user:
+                    logs = AuditService.get_user_logs(user.id, page=1, per_page=50, db_session=session)
+                    for log in logs:
+                        # Convert UTC to IST (UTC + 5:30)
+                        from datetime import timedelta
+                        ist_time = log.timestamp + timedelta(hours=5, minutes=30) if log.timestamp else None
+                        dt = ist_time.strftime("%Y-%m-%d %H:%M:%S") if ist_time else "--"
+                        tree.insert("", "end", values=(dt, log.action, log.ip_address, log.user_agent))
+                        
+            # Schedule next refresh (Poll every 5 seconds)
+            # Accessing self.window might fail if view is destroyed, so we wrap in try/except or rely on on_nav_change cleanup
+            self.audit_refresh_job = self.window.after(5000, lambda: self._refresh_security_log(tree))
+            
+        except Exception as e:
+            logging.error(f"Failed to load audit logs: {e}")
+            # Do not schedule next if failed to prevent error loop/spam, or schedule with longer delay
+

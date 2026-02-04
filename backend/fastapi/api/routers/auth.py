@@ -63,7 +63,8 @@ async def login(
     auth_service: AuthService = Depends()
 ):
     ip = request.client.host
-    user = auth_service.authenticate_user(form_data.username, form_data.password, ip_address=ip)
+    user_agent = request.headers.get("user-agent", "Unknown")
+    user = auth_service.authenticate_user(form_data.username, form_data.password, ip_address=ip, user_agent=user_agent)
     
     # PR 4: 2FA Check
     if user.is_2fa_enabled:

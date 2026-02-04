@@ -130,11 +130,63 @@ class AppAuth:
                  bg=self.app.colors["bg"], fg=self.app.colors["text_primary"]).pack(anchor="w")
         password_entry = tk.Entry(entry_frame, font=("Segoe UI", 12), show="*")
         password_entry.pack(fill="x", pady=(5, 5))
+
+        # Check Caps Lock Function
+        def check_caps_lock(event):
+            # On Windows, bit 0 (0x0001) is Shift, bit 1 (0x0002) is Caps Lock.
+            # However, event.state behaves differently across OS. 
+            # Reliable method for Windows/Linux usually involves checking the state bitmask.
+            # Caps Lock bit is typically 0x0002.
+            
+            # Note: For KeyRelease event, the state might be lagging or different depending on exact key.
+            # But generally checking specific bit works.
+            
+            # ALSO: event.keycode 20 is Caps Lock key itself.
+            
+            # Simple heuristic for Tkinter:
+            if event.keysym == 'Caps_Lock':
+                # If the key pressed IS Caps Lock, we might need to assume it TOGGLED state.
+                # But event.state reflects state BEFORE the key press usually.
+                # Actually, worst case we can't be 100% sure without ctypes on Windows, 
+                # but standard practice is checking event.state & 0x0002.
+                pass 
+                
+            try:
+                # 0x2 is Caps Lock on most systems (Windows/Linux/Mac)
+                is_caps = (int(event.state) & 0x0002) != 0
+                
+                # If the event itself is Caps_Lock press, the state might be inverted in this event context?
+                # Let's rely on the state bit.
+                
+                if is_caps:
+                     self.caps_warning_label.pack(anchor="w", pady=(0, 5))
+                else:
+                     self.caps_warning_label.pack_forget()
+            except Exception:
+                pass
+
+
+        password_entry.bind("<KeyPress>", check_caps_lock)
+        password_entry.bind("<KeyRelease>", check_caps_lock)
+        password_entry.bind("<FocusIn>", check_caps_lock)
+        password_entry.bind("<FocusOut>", lambda e: self.caps_warning_label.pack_forget())
+
         
         # Password error label for empty password feedback
         login_password_error_label = tk.Label(entry_frame, text="", font=("Segoe UI", 8), 
                                               bg=self.app.colors["bg"], fg="#EF4444")
-        login_password_error_label.pack(anchor="w", pady=(0, 10))
+        login_password_error_label.pack(anchor="w", pady=(0, 2)) # Reduced padding
+
+        # Caps Lock Warning Label
+        self.caps_warning_label = tk.Label(entry_frame, text="⚠️ Caps Lock is ON", font=("Segoe UI", 8, "bold"), 
+                                      bg=self.app.colors["bg"], fg="#F59E0B")
+        # Do not pack initially, or pack hidden. Better to pack_forget initially.
+        # But for layout stability, maybe pack it and set text empty? 
+        # Requirement says "Hide warning when Caps Lock is OFF". 
+        # I'll use pack normally but manage visibility via pack/pack_forget or config text.
+        # Let's use config text="" to keep layout simpler or pack_forget to save space. 
+        # Given "Show/Hide", I will use pack_forget/pack.
+
 
         # Show Password checkbox
         show_password_var = tk.BooleanVar()

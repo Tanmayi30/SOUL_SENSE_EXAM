@@ -5,14 +5,18 @@ Provides authenticated CRUD endpoints for user management.
 """
 
 from typing import Annotated, List
+from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..schemas import (
     UserResponse,
     UserUpdate,
     UserDetail,
-    CompleteProfileResponse
+    UserDetail,
+    CompleteProfileResponse,
+    AuditLogResponse
 )
+from app.services.audit_service import AuditService
 from ..services.user_service import UserService
 from ..services.profile_service import ProfileService
 from ..routers.auth import get_current_user
@@ -139,6 +143,22 @@ async def delete_current_user(
     """
     user_service.delete_user(current_user.id)
     return None
+
+
+@router.get("/me/audit-logs", response_model=List[AuditLogResponse], summary="Get Current User Audit Logs")
+async def get_my_audit_logs(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    page: int = 1,
+    per_page: int = 20
+):
+    """
+    Get audit logs for the currently authenticated user.
+    """
+    if per_page > 50:
+        per_page = 50
+        
+    return AuditService.get_user_logs(current_user.id, page=page, per_page=per_page, db_session=db)
 
 
 # ============================================================================

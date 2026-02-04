@@ -722,4 +722,32 @@ class SyncSettingConflictResponse(BaseModel):
     key: str
     current_version: int
     current_value: Any
+    
+
+# ============================================================================
+# Audit Log Schemas
+# ============================================================================
+
+class AuditLogResponse(BaseModel):
+    """Schema for individual audit log entry."""
+    id: int
+    action: str
+    ip_address: Optional[str]
+    user_agent: Optional[str]
+    details: Optional[Dict[str, Any]] = None
+    timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator('details', mode='before')
+    @classmethod
+    def parse_details(cls, v):
+        if isinstance(v, str):
+            try:
+                import json
+                return json.loads(v)
+            except:
+                return None
+        return v
+
 

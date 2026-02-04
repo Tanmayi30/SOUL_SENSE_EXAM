@@ -44,7 +44,7 @@ class AuthService:
             logger.error(f"Error verifying password: {e}")
             return False
 
-    def authenticate_user(self, identifier: str, password: str, ip_address: str = "0.0.0.0") -> Optional[User]:
+    def authenticate_user(self, identifier: str, password: str, ip_address: str = "0.0.0.0", user_agent: str = "Unknown") -> Optional[User]:
         """
         Authenticate a user by username OR email and password.
         
@@ -88,6 +88,18 @@ class AuthService:
         # 6. Success - Update last login & Audit
         self._record_login_attempt(identifier_lower, True, ip_address)
         self.update_last_login(user.id)
+        
+        # SoulSense Audit Log
+        from app.services.audit_service import AuditService
+        AuditService.log_event(
+            user.id,
+            "LOGIN",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            details={"method": "password", "status": "success"},
+            db_session=self.db
+        )
+
         
         return user
 

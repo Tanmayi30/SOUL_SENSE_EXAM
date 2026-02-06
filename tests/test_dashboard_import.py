@@ -18,14 +18,23 @@ class MockTkinterParent:
         self._last_child_ids = {}
         self.tk = Mock()
         self.tk.call = Mock(return_value='')
+        self.tk.getvar = Mock(return_value='')
+        self.tk.setvar = Mock()
+        self.tk.globalgetvar = Mock(return_value='')
+        self.tk.globalsetvar = Mock()
         self._w = '.test_parent'
         self._name = 'test_parent'
         self.children = {}
         self.master = None
+        self._tclCommands = []
         
     def configure(self, **kwargs):
         """Mock configure method"""
         pass
+    
+    def cget(self, key):
+        """Mock cget method"""
+        return None
     
     def winfo_screenwidth(self):
         return 1920
@@ -39,8 +48,39 @@ class MockTkinterParent:
     def winfo_height(self):
         return 600
     
+    def winfo_reqwidth(self):
+        return 800
+    
+    def winfo_reqheight(self):
+        return 600
+    
+    def winfo_x(self):
+        return 0
+    
+    def winfo_y(self):
+        return 0
+    
+    def update(self):
+        """Mock update method"""
+        pass
+    
+    def update_idletasks(self):
+        """Mock update_idletasks method"""
+        pass
+    
     def __str__(self):
         return self._w
+    
+    def __repr__(self):
+        return f"MockTkinterParent({self._w})"
+    
+    def __add__(self, other):
+        """Handle string concatenation for widget paths"""
+        return str(self._w) + str(other)
+    
+    def __radd__(self, other):
+        """Handle reverse string concatenation"""
+        return str(other) + str(self._w)
 
 
 class TestProgressDashboard:

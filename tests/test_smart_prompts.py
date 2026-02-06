@@ -211,7 +211,7 @@ class TestContextAnalysis:
             entries.append(entry)
         
         mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = entries
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = list(reversed(entries))
         
         context = service.get_user_context(user_id=1)
         

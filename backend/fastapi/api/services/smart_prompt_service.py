@@ -344,9 +344,12 @@ class SmartPromptService:
     
     def _get_context_reason(self, category: str, context: Dict[str, Any]) -> str:
         """Generate a human-readable reason for why this category was selected."""
+        stress_avg = context.get('recent_stress_avg')
+        stress_display = f"{stress_avg:.1f}/10" if stress_avg is not None else "elevated"
+        
         reasons = {
             "anxiety": "We noticed some anxious patterns in your recent entries",
-            "stress": f"Your stress levels have been elevated (avg: {context.get('recent_stress_avg', 'N/A'):.0f}/10)",
+            "stress": f"Your stress levels have been {stress_display}",
             "sadness": "Your recent sentiment has been lower than usual",
             "low_energy": "You've mentioned feeling tired or low energy",
             "gratitude": "Gratitude journaling can boost your mood",

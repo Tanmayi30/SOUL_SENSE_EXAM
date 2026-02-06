@@ -2,10 +2,12 @@ import bcrypt
 import secrets
 import time
 from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from app.db import get_session
 from app.models import User, UserSession
 from app.security_config import PASSWORD_HASH_ROUNDS, LOCKOUT_DURATION_MINUTES
 from app.services.audit_service import AuditService
+from app.validation import validate_username, validate_email_strict, validate_password_security
 import logging
 
 class AuthManager:
@@ -36,25 +38,33 @@ class AuthManager:
             return False
 
     def register_user(self, username, email, first_name, last_name, age, gender, password):
-        # Enhanced validation
-        if len(username) < 3:
-            return False, "Username must be at least 3 characters", "REG003"
+        # 1. Centralized Validation (Strict Rules)
+        is_valid, error = validate_username(username)
+        if not is_valid:
+            return False, error, "REG003"
+            
+        is_valid, error = validate_email_strict(email)
+        if not is_valid:
+            return False, error, "REG004"
+            
+        is_valid, error = validate_password_security(password)
+        if not is_valid:
+            return False, error, "REG005"
+            
         if len(first_name) < 1:
-            return False, "First name is required", "REG004"
-        if len(password) < 8:
-            return False, "Password must be at least 8 characters", "REG005"
-        if not self._validate_password_strength(password):
-            return False, "Password must contain uppercase, lowercase, number and special character", "REG006"
+            return False, "First name is required", "REG006"
+            
         if age < 13 or age > 120:
             return False, "Age must be between 13 and 120", "REG007"
+            
         if gender not in ["M", "F", "Other", "Prefer not to say"]:
             return False, "Invalid gender selection", "REG008"
 
         session = get_session()
         try:
-            # 1. Normalize
-            username_lower = username.lower().strip()
-            email_lower = email.lower().strip()
+            # 1. Normalize identifiers for security consistency
+            username_lower = username.strip().lower()
+            email_lower = email.strip().lower()
 
             # 2. Check if username already exists
             if session.query(User).filter(User.username == username_lower).first():
@@ -109,8 +119,8 @@ class AuthManager:
 
         session = get_session()
         try:
-            # Normalize
-            id_lower = identifier.lower().strip()
+            # Normalize identifier
+            id_lower = identifier.strip().lower()
 
             # 1. Try fetching by username
             user = session.query(User).filter(User.username == id_lower).first()
@@ -160,6 +170,8 @@ class AuthManager:
                 # Update last login
                 try:
                     now_iso = datetime.now(UTC).isoformat()
+                    now = datetime.now(timezone.utc)
+                    now_iso = now.isoformat()
                     user.last_login = now_iso
                     # PR 2: Update last_ activity on login (Issue fix)
                     user.last_activity = now_iso
@@ -218,6 +230,7 @@ class AuthManager:
                             user_session.is_active = False
                             user_session.logged_out_at = datetime.now(UTC).isoformat()
                     
+                    user.last_activity = datetime.now(timezone.utc).isoformat()
                     # Audit Logout
                     AuditService.log_event(user.id, "LOGOUT", db_session=session)
                     session.commit()
@@ -237,6 +250,7 @@ class AuthManager:
         if self.current_user is None:
             return False
         if self.session_expiry and datetime.now(UTC) > self.session_expiry:
+        if self.session_expiry and datetime.now(timezone.utc) > self.session_expiry:
             self.logout_user()
             return False
         return True
@@ -269,6 +283,8 @@ class AuthManager:
             
             # Count recent failed attempts
             since_time = datetime.now(UTC) - timedelta(seconds=self.lockout_duration)
+            # USE TIMEZONE-AWARE DATETIME TO PREVENT CRASH
+            since_time = datetime.now(timezone.utc) - timedelta(seconds=self.lockout_duration)
             
             recent_failures = session.query(LoginAttempt).filter(
                 LoginAttempt.username == username,
@@ -306,6 +322,14 @@ class AuthManager:
                 fifth_failure = recent_failures[4]
                 lockout_end = fifth_failure.timestamp + timedelta(seconds=self.lockout_duration)
                 remaining = (lockout_end - datetime.now(UTC)).total_seconds()
+                
+                # Ensure comparison is done with aware datetimes
+                failure_time = fifth_failure.timestamp
+                if failure_time.tzinfo is None:
+                    failure_time = failure_time.replace(tzinfo=timezone.utc)
+                
+                lockout_end = failure_time + timedelta(seconds=self.lockout_duration)
+                remaining = (lockout_end - datetime.now(timezone.utc)).total_seconds()
                 return max(0, int(remaining))
             return 0
         except Exception as e:
@@ -322,6 +346,7 @@ class AuthManager:
                 username=username,
                 is_successful=success,
                 timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 ip_address="desktop",
                 failure_reason=reason
             )

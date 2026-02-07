@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, UTC
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.auth import AuthManager
-from app.models import User, Session
+from app.models import User, UserSession
 from app.db import get_session
 
 
@@ -35,11 +35,11 @@ class TestSessionManagement:
     def test_session_id_generation_on_login(self, temp_db):
         """Test that a unique session ID is generated on successful login"""
         # Register a test user
-        success, msg = self.auth_manager.register_user("sessionuser", "password123")
-        assert success, "User registration should succeed"
+        success, msg, error_code = self.auth_manager.register_user("sessionuser", "sessionuser@test.com", "John", "Doe", 25, "M", "Password123!")
+        assert success, f"User registration should succeed. Error: {msg} (Code: {error_code})"
         
         # Login the user
-        success, msg = self.auth_manager.login_user("sessionuser", "password123")
+        success, msg, error_code = self.auth_manager.login_user("sessionuser", "Password123!")
         assert success, "Login should succeed"
         
         # Check that a session ID was created
@@ -49,7 +49,7 @@ class TestSessionManagement:
         # Verify session ID is in database
         session = get_session()
         try:
-            db_session = session.query(Session).filter_by(
+            db_session = session.query(UserSession).filter_by(
                 session_id=self.auth_manager.current_session_id
             ).first()
             
@@ -62,14 +62,14 @@ class TestSessionManagement:
     def test_unique_session_ids_for_multiple_logins(self, temp_db):
         """Test that each login generates a unique session ID"""
         # Register a user
-        self.auth_manager.register_user("multiuser", "password123")
+        self.auth_manager.register_user("multiuser", "multiuser@test.com", "Jane", "Smith", 30, "F", "Password123!")
         
         session_ids = []
         
         # Login multiple times
         for i in range(3):
             auth = AuthManager()  # New instance for each login
-            success, msg = auth.login_user("multiuser", "password123")
+            success, msg, error_code = auth.login_user("multiuser", "Password123!")
             assert success, f"Login {i+1} should succeed"
             
             session_ids.append(auth.current_session_id)
@@ -80,14 +80,14 @@ class TestSessionManagement:
     def test_session_data_stored_correctly(self, temp_db):
         """Test that session data is stored with user and timestamp"""
         # Register and login
-        self.auth_manager.register_user("datauser", "password123")
-        success, msg = self.auth_manager.login_user("datauser", "password123")
+        self.auth_manager.register_user("datauser", "datauser@test.com", "Bob", "Johnson", 28, "M", "Password123!")
+        success, msg, error_code = self.auth_manager.login_user("datauser", "Password123!")
         assert success
         
         # Get session from database
         session = get_session()
         try:
-            db_session = session.query(Session).filter_by(
+            db_session = session.query(UserSession).filter_by(
                 session_id=self.auth_manager.current_session_id
             ).first()
             
@@ -108,15 +108,14 @@ class TestSessionManagement:
     def test_session_invalidation_on_logout(self, temp_db):
         """Test that session is invalidated when user logs out"""
         # Register and login
-        self.auth_manager.register_user("logoutuser", "password123")
-        self.auth_manager.login_user("logoutuser", "password123")
+        self.auth_manager.register_user("logoutuser", "logoutuser@test.com", "Alice", "Brown", 27, "F", "Password123!")
+        self.auth_manager.login_user("logoutuser", "Password123!")
         
         session_id = self.auth_manager.current_session_id
         assert session_id is not None, "Session should exist after login"
         
         # Logout
-        success, msg = self.auth_manager.logout_user()
-        assert success, "Logout should succeed"
+        self.auth_manager.logout_user()
         
         # Verify session is cleared from auth manager
         assert self.auth_manager.current_session_id is None, "Session ID should be cleared"
@@ -125,7 +124,7 @@ class TestSessionManagement:
         # Verify session is invalidated in database
         session = get_session()
         try:
-            db_session = session.query(Session).filter_by(session_id=session_id).first()
+            db_session = session.query(UserSession).filter_by(session_id=session_id).first()
             
             assert db_session is not None, "Session record should still exist"
             assert db_session.is_active == False, "Session should be marked as inactive"
@@ -136,14 +135,14 @@ class TestSessionManagement:
     def test_no_duplicate_active_sessions_for_same_user(self, temp_db):
         """Test that multiple active sessions can exist for same user"""
         # Register a user
-        self.auth_manager.register_user("concurrent", "password123")
+        self.auth_manager.register_user("concurrent", "concurrent@test.com", "Chris", "Davis", 29, "M", "Password123!")
         
         # Create multiple sessions
         auth1 = AuthManager()
         auth2 = AuthManager()
         
-        auth1.login_user("concurrent", "password123")
-        auth2.login_user("concurrent", "password123")
+        auth1.login_user("concurrent", "Password123!")
+        auth2.login_user("concurrent", "Password123!")
         
         # Both should have different session IDs
         assert auth1.current_session_id != auth2.current_session_id
@@ -151,7 +150,7 @@ class TestSessionManagement:
         # Both sessions should be active in database
         session = get_session()
         try:
-            active_sessions = session.query(Session).filter_by(
+            active_sessions = session.query(UserSession).filter_by(
                 username="concurrent",
                 is_active=True
             ).all()
@@ -163,36 +162,36 @@ class TestSessionManagement:
     def test_session_validation(self, temp_db):
         """Test session validation functionality"""
         # Register and login
-        self.auth_manager.register_user("validateuser", "password123")
-        self.auth_manager.login_user("validateuser", "password123")
+        self.auth_manager.register_user("validateuser", "validateuser@test.com", "Emma", "Wilson", 26, "F", "Password123!")
+        self.auth_manager.login_user("validateuser", "Password123!")
         
         session_id = self.auth_manager.current_session_id
         
         # Validate active session
-        is_valid, username = self.auth_manager.validate_session(session_id)
+        is_valid, msg, session_data = self.auth_manager.validate_session(session_id)
         assert is_valid == True, "Active session should be valid"
-        assert username == "validateuser", "Should return correct username"
+        assert session_data['username'] == "validateuser", "Should return correct username"
         
         # Logout and validate again
         self.auth_manager.logout_user()
-        is_valid, username = self.auth_manager.validate_session(session_id)
+        is_valid, msg, session_data = self.auth_manager.validate_session(session_id)
         assert is_valid == False, "Logged out session should be invalid"
-        assert username is None, "Invalid session should return None"
+        assert session_data is None, "Invalid session should return None"
     
     def test_session_cleanup_old_sessions(self, temp_db):
         """Test cleanup of old sessions"""
         # Register and login
-        self.auth_manager.register_user("cleanupuser", "password123")
-        self.auth_manager.login_user("cleanupuser", "password123")
+        self.auth_manager.register_user("cleanupuser", "cleanupuser@test.com", "Michael", "Taylor", 31, "M", "Password123!")
+        self.auth_manager.login_user("cleanupuser", "Password123!")
         
         session_id = self.auth_manager.current_session_id
         
         # Manually set session to be 25 hours old
         session = get_session()
         try:
-            db_session = session.query(Session).filter_by(session_id=session_id).first()
+            db_session = session.query(UserSession).filter_by(session_id=session_id).first()
             old_time = datetime.now(UTC) - timedelta(hours=25)
-            db_session.created_at = old_time.isoformat()
+            db_session.last_accessed = old_time.isoformat()  # Update last_accessed, not created_at
             session.commit()
         finally:
             session.close()
@@ -204,7 +203,7 @@ class TestSessionManagement:
         # Verify session is now inactive
         session = get_session()
         try:
-            db_session = session.query(Session).filter_by(session_id=session_id).first()
+            db_session = session.query(UserSession).filter_by(session_id=session_id).first()
             assert db_session.is_active == False, "Old session should be inactive"
         finally:
             session.close()
@@ -212,15 +211,15 @@ class TestSessionManagement:
     def test_get_active_sessions(self, temp_db):
         """Test retrieving active sessions"""
         # Register and create multiple sessions
-        self.auth_manager.register_user("activeuser", "password123")
+        self.auth_manager.register_user("activeuser", "activeuser@test.com", "Sarah", "Anderson", 24, "F", "Password123!")
         
         auth1 = AuthManager()
         auth2 = AuthManager()
         auth3 = AuthManager()
         
-        auth1.login_user("activeuser", "password123")
-        auth2.login_user("activeuser", "password123")
-        auth3.login_user("activeuser", "password123")
+        auth1.login_user("activeuser", "Password123!")
+        auth2.login_user("activeuser", "Password123!")
+        auth3.login_user("activeuser", "Password123!")
         
         # Get active sessions
         active = self.auth_manager.get_active_sessions("activeuser")
@@ -236,15 +235,15 @@ class TestSessionManagement:
     def test_invalidate_all_user_sessions(self, temp_db):
         """Test invalidating all sessions for a user"""
         # Register and create multiple sessions
-        self.auth_manager.register_user("bulkuser", "password123")
+        self.auth_manager.register_user("bulkuser", "bulkuser@test.com", "David", "Martinez", 33, "M", "Password123!")
         
         auth1 = AuthManager()
         auth2 = AuthManager()
         auth3 = AuthManager()
         
-        auth1.login_user("bulkuser", "password123")
-        auth2.login_user("bulkuser", "password123")
-        auth3.login_user("bulkuser", "password123")
+        auth1.login_user("bulkuser", "Password123!")
+        auth2.login_user("bulkuser", "Password123!")
+        auth3.login_user("bulkuser", "Password123!")
         
         # Invalidate all sessions
         count = self.auth_manager.invalidate_user_sessions("bulkuser")
@@ -257,15 +256,15 @@ class TestSessionManagement:
     def test_session_last_accessed_update(self, temp_db):
         """Test that last_accessed is updated on validation"""
         # Register and login
-        self.auth_manager.register_user("accessuser", "password123")
-        self.auth_manager.login_user("accessuser", "password123")
+        self.auth_manager.register_user("accessuser", "accessuser@test.com", "Lisa", "Garcia", 29, "F", "Password123!")
+        self.auth_manager.login_user("accessuser", "Password123!")
         
         session_id = self.auth_manager.current_session_id
         
         # Get initial last_accessed
         session = get_session()
         try:
-            db_session = session.query(Session).filter_by(session_id=session_id).first()
+            db_session = session.query(UserSession).filter_by(session_id=session_id).first()
             initial_access = db_session.last_accessed
         finally:
             session.close()
@@ -278,7 +277,7 @@ class TestSessionManagement:
         # Check last_accessed was updated
         session = get_session()
         try:
-            db_session = session.query(Session).filter_by(session_id=session_id).first()
+            db_session = session.query(UserSession).filter_by(session_id=session_id).first()
             updated_access = db_session.last_accessed
             assert updated_access > initial_access, "Last accessed should be updated"
         finally:

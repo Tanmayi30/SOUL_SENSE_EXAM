@@ -5,8 +5,9 @@ from app.auth.app_auth import AppAuth, PasswordStrengthMeter
 
 # Define MockWidget locally to ensure it is available and correctly used
 class MockWidget(MagicMock):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, master=None, *args, **kwargs):
         super().__init__()
+        self.master = master  # Explicitly set to prevent infinite mock chain
         self._config = kwargs
         # Ensure geometry methods return ints by default
         self.winfo_screenwidth = MagicMock(return_value=1920)

@@ -46,7 +46,9 @@ def test_idle_watcher_warning():
     watcher = IdleWatcher(root, callback, timeout_seconds=60)
     
     with patch("app.auth.idle_watcher.time.time") as mock_time, \
-         patch("tkinter.Toplevel") as mock_toplevel:
+         patch("app.auth.idle_watcher.tk.Toplevel") as mock_toplevel, \
+         patch("app.auth.idle_watcher.tk.Label") as mock_label, \
+         patch("app.auth.idle_watcher.tk.Button") as mock_button:
         
         # Setup mock toplevel to prevent GUI issues
         mock_warning = MagicMock()

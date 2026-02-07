@@ -165,6 +165,7 @@ def mock_tk_variables(monkeypatch):
     class MockWidget(MagicMock):
         def __init__(self, master=None, **kwargs):
             super().__init__()
+            self.master = master  # Explicitly set to prevent infinite mock chain
             self._config = {}
             # Add missing methods that are called during window operations
             self.transient = MagicMock()

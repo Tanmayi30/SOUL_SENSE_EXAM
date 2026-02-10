@@ -5,9 +5,11 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 
 from ..config import get_settings
-from ..schemas import UserCreate, Token, UserResponse, ErrorResponse, PasswordResetRequest, PasswordResetComplete, TwoFactorLoginRequest, TwoFactorAuthRequiredResponse, TwoFactorConfirmRequest, UsernameAvailabilityResponse
+from ..schemas import UserCreate, Token, UserResponse, ErrorResponse, PasswordResetRequest, PasswordResetComplete, TwoFactorLoginRequest, TwoFactorAuthRequiredResponse, TwoFactorConfirmRequest, UsernameAvailabilityResponse, CaptchaResponse, LoginRequest
 from ..services.db_service import get_db
 from ..services.auth_service import AuthService
+from ..services.mock_auth_service import MockAuthService
+from ..services.captcha_service import captcha_service
 from ..constants.errors import ErrorCode
 from ..constants.security_constants import REFRESH_TOKEN_EXPIRE_DAYS
 from ..exceptions import AuthException, APIException, RateLimitException
@@ -20,6 +22,16 @@ router = APIRouter()
 settings = get_settings()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
+    """
+    Dependency to get the appropriate auth service based on configuration.
+    Returns MockAuthService if mock_auth_mode is enabled, otherwise returns AuthService.
+    """
+    if settings.mock_auth_mode:
+        return MockAuthService(db)
+    return AuthService(db)
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)):
     """
@@ -46,6 +58,15 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Se
     return user
 
 
+@router.post("/register", response_model=UserResponse, responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
+async def register(user: UserCreate, auth_service: AuthService = Depends(get_auth_service)):
+    new_user = auth_service.register_user(user)
+    return UserResponse(
+        id=new_user.id, 
+        username=new_user.username, 
+        created_at=new_user.created_at,
+        last_login=new_user.last_login
+    )
 # Rate limiter cache for username checks (20 per minute per IP)
 availability_limiter_cache = TTLCache(maxsize=1000, ttl=60)
 
@@ -99,18 +120,42 @@ async def register(
     return {"message": message}
 
 
+@router.get("/captcha", response_model=CaptchaResponse)
+async def get_captcha(request: Request):
+    """
+    Generate and return a new CAPTCHA for login.
+    Returns CAPTCHA code and session ID.
+    """
+    import uuid
+    session_id = str(uuid.uuid4())
+
+    captcha_code = captcha_service.generate_captcha(session_id)
+
+    return CaptchaResponse(captcha_code=captcha_code, session_id=session_id)
+
+
 @router.post("/login", response_model=None, responses={401: {"model": ErrorResponse}, 202: {"model": TwoFactorAuthRequiredResponse}, 200: {"model": Token}})
 async def login(
     response: Response,
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()], 
+    login_data: LoginRequest,
     request: Request,
-    auth_service: AuthService = Depends()
+    auth_service: AuthService = Depends(get_auth_service)
 ):
     from api.middleware.rate_limiter import login_limiter
     ip = request.client.host
     user_agent = request.headers.get("user-agent", "Unknown")
 
-    # 1. Rate Limit by IP
+    # 1. Validate CAPTCHA first
+    if not captcha_service.validate_captcha(login_data.session_id, login_data.captcha_input):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "AUTH003",
+                "message": "Invalid CAPTCHA. Please try again!"
+            }
+        )
+
+    # 2. Rate Limit by IP
     is_limited, wait_time = login_limiter.is_rate_limited(ip)
     if is_limited:
          raise HTTPException(
@@ -118,15 +163,20 @@ async def login(
             detail=f"Too many login attempts. Please try again in {wait_time}s."
         )
 
-    # 2. Rate Limit by Username (Identifier)
-    is_limited, wait_time = login_limiter.is_rate_limited(f"login_{form_data.username}")
+    # 3. Rate Limit by Username (Identifier)
+    is_limited, wait_time = login_limiter.is_rate_limited(f"login_{login_data.identifier}")
     if is_limited:
          raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Account temporarily restricted due to multiple login attempts. Please try again in {wait_time}s."
         )
 
-    user = auth_service.authenticate_user(form_data.username, form_data.password, ip_address=ip, user_agent=user_agent)
+    user = auth_service.authenticate_user(login_data.identifier, login_data.password, ip_address=ip, user_agent=user_agent)
+    
+    # PR 4: 2FA Check
+    if user.is_2fa_enabled:
+        pre_auth_token = auth_service.initiate_2fa_login(user)
+        response.status_code = status.HTTP_202_ACCEPTED
     
     # PR 4: 2FA Check
     if user.is_2fa_enabled:
@@ -160,7 +210,7 @@ async def login(
 async def verify_2fa(
     login_request: TwoFactorLoginRequest,
     response: Response,
-    auth_service: AuthService = Depends()
+    auth_service: AuthService = Depends(get_auth_service)
 ):
     """
     Verify 2FA code and issue tokens.
@@ -190,7 +240,7 @@ async def verify_2fa(
 async def refresh(
     request: Request,
     response: Response,
-    auth_service: AuthService = Depends()
+    auth_service: AuthService = Depends(get_auth_service)
 ):
     refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
@@ -217,7 +267,7 @@ async def refresh(
 async def logout(
     request: Request,
     response: Response,
-    auth_service: AuthService = Depends()
+    auth_service: AuthService = Depends(get_auth_service)
 ):
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
@@ -234,6 +284,8 @@ async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]
 
 @router.post("/password-reset/initiate")
 async def initiate_password_reset(
+    request: PasswordResetRequest,
+    auth_service: AuthService = Depends(get_auth_service)
     request: Request,
     reset_data: PasswordResetRequest, # Renamed to avoid name conflict with Request
     auth_service: AuthService = Depends()
@@ -272,6 +324,7 @@ async def initiate_password_reset(
 @router.post("/password-reset/complete")
 async def complete_password_reset(
     request: PasswordResetComplete,
+    auth_service: AuthService = Depends(get_auth_service)
     req_obj: Request, # Need Request object for IP
     auth_service: AuthService = Depends()
 ):
@@ -303,7 +356,7 @@ async def complete_password_reset(
 @router.post("/2fa/setup/initiate")
 async def initiate_2fa_setup(
     current_user: Annotated[User, Depends(get_current_user)],
-    auth_service: AuthService = Depends()
+    auth_service: AuthService = Depends(get_auth_service)
 ):
     """Send OTP to verify email before enabling 2FA."""
     if auth_service.send_2fa_setup_otp(current_user):
@@ -315,7 +368,7 @@ async def initiate_2fa_setup(
 async def enable_2fa(
     request: TwoFactorConfirmRequest,
     current_user: Annotated[User, Depends(get_current_user)],
-    auth_service: AuthService = Depends()
+    auth_service: AuthService = Depends(get_auth_service)
 ):
     """Enable 2FA after verifying OTP."""
     if auth_service.enable_2fa(current_user.id, request.code):
@@ -326,7 +379,7 @@ async def enable_2fa(
 @router.post("/2fa/disable")
 async def disable_2fa(
     current_user: Annotated[User, Depends(get_current_user)],
-    auth_service: AuthService = Depends()
+    auth_service: AuthService = Depends(get_auth_service)
 ):
     """Disable 2FA."""
     if auth_service.disable_2fa(current_user.id):

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from pydantic import Field, field_validator, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 BACKEND_DIR = ROOT_DIR / "backend"
 FASTAPI_DIR = BACKEND_DIR / "fastapi"
 ENV_FILE = ROOT_DIR / ".env"
@@ -33,6 +33,9 @@ class BaseAppSettings(BaseSettings):
     port: int = Field(default=8000, ge=1, le=65535, description="Server port")
     debug: bool = Field(default=True, description="Debug mode")
     welcome_message: str = Field(default="Welcome to Soul Sense!", description="Welcome message")
+    
+    # Mock Authentication Mode (for testing/development)
+    mock_auth_mode: bool = Field(default=False, description="Enable mock authentication for testing")
 
     # Database configuration
     database_type: str = Field(default="sqlite", description="Database type")

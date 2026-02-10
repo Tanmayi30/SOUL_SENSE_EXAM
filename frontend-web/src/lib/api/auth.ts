@@ -1,13 +1,18 @@
 import { apiClient } from './client';
 
 export const authApi = {
-  async login(formData: string): Promise<{ access_token: string; pre_auth_token?: string }> {
+  async login(data: {
+    username: string;
+    password: string;
+    captcha_input?: string;
+    session_id?: string;
+  }): Promise<{ access_token: string; pre_auth_token?: string }> {
     return apiClient('/auth/login', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: formData,
+      body: JSON.stringify(data),
     });
   },
 

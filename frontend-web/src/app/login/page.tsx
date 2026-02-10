@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { UseFormReturn } from 'react-hook-form';
 
 import { useAuth } from '@/hooks/useAuth';
+import { ApiError } from '@/lib/api/errors';
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
@@ -46,99 +47,86 @@ export default function LoginPage() {
     return () => clearInterval(timer);
   }, [lockoutTime]);
 
-  const { login } = useAuth(); // If we use context, we assume context logic might need update too,
-  // but here we are doing manual fetch first.
-  // Ideally useAuth should handle this, but for speed modifying Page first.
+  const { login, login2FA } = useAuth();
 
   const handleLoginSubmit = async (data: LoginFormData, methods: UseFormReturn<LoginFormData>) => {
     if (lockoutTime > 0) return;
+    if (!navigator.onLine) {
+      methods.setError('root', {
+        message: 'You are currently offline. Please check your internet connection.',
+      });
+      return;
+    }
 
     setIsLoggingIn(true);
     try {
       const formData = new URLSearchParams();
-      // loginSchema uses 'identifier'
       formData.append('username', data.identifier);
       formData.append('password', data.password);
 
-      const response = await fetch('http://localhost:8000/api/v1/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formData.toString(),
-      });
+      const result = await login(formData.toString(), !!data.rememberMe);
 
-      if (response.status === 202) {
-        // 2FA Required
-        const result = await response.json();
+      if (result?.pre_auth_token) {
         setPreAuthToken(result.pre_auth_token);
         setShow2FA(true);
-        return; // Stop here, wait for OTP
       }
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        const code = errorData.detail?.code;
-
-        // Map login-specific error codes
-        if (code === 'AUTH001') {
-          methods.setError('identifier', { message: 'Invalid username/email or password' });
-          return;
-        }
-
-        if (code === 'AUTH002') {
-          const waitSeconds = errorData.detail?.details?.wait_seconds || 60;
-          setLockoutTime(waitSeconds);
-          methods.setError('root', {
-            message: `Account locked. Please wait ${waitSeconds} seconds.`,
-          });
-          return;
-        }
-
-        const errorMessage = errorData.detail?.message || errorData.detail || 'Login failed';
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-      console.log('Login successful:', result);
-      // Store token (Basic implementation) - useAuth should handle this
-      localStorage.setItem('token', result.access_token);
-      router.push('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
-      methods.setError('root', {
-        message: error instanceof Error ? error.message : 'Invalid credentials',
-      });
+
+      let errorMessage = 'Login failed. Please try again.';
+
+      if (error instanceof ApiError) {
+        if (error.isNetworkError) {
+          errorMessage =
+            'Connection failed. Please check if your server is running and you have internet access.';
+        } else if (error.status === 401) {
+          const detail = error.detail;
+          if (detail?.code === 'AUTH001') {
+            methods.setError('identifier', { message: 'Invalid username/email or password' });
+            return;
+          }
+          errorMessage = detail?.message || 'Invalid credentials';
+        } else if (error.status === 429) {
+          const waitSeconds = error.detail?.details?.wait_seconds || 60;
+          setLockoutTime(waitSeconds);
+          errorMessage = `Too many attempts. Account locked for ${waitSeconds} seconds.`;
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      methods.setError('root', { message: errorMessage });
     } finally {
       setIsLoggingIn(false);
     }
   };
 
   const handleVerifyOTP = async () => {
+    if (!navigator.onLine) {
+      setTwoFaError('You are currently offline.');
+      return;
+    }
+
     setIsLoggingIn(true);
     setTwoFaError('');
     try {
-      const response = await fetch('http://localhost:8000/api/v1/auth/login/2fa', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      await login2FA(
+        {
           pre_auth_token: preAuthToken,
           code: otpCode,
-        }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail?.message || 'Verification failed');
+        },
+        true
+      ); // Fixed rememberMe for 2FA for now
+    } catch (error: any) {
+      let errorMessage = 'Verification failed. Please try again.';
+      if (error instanceof ApiError) {
+        if (error.isNetworkError) {
+          errorMessage = 'Connection lost. Please check your internet.';
+        } else {
+          errorMessage = error.message;
+        }
       }
-
-      const result = await response.json();
-      localStorage.setItem('token', result.access_token);
-      window.location.href = '/dashboard';
-    } catch (error) {
-      setTwoFaError(error instanceof Error ? error.message : 'Invalid Code');
+      setTwoFaError(errorMessage);
     } finally {
       setIsLoggingIn(false);
     }

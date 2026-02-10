@@ -1,28 +1,35 @@
-import { z } from 'zod';
-import { PasswordResetComplete } from '../validation/schemas';
-import { ApiError } from './errors';
-
-const API_Base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+import { apiClient } from './client';
 
 export const authApi = {
+  async login(formData: string): Promise<{ access_token: string; pre_auth_token?: string }> {
+    return apiClient('/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData,
+    });
+  },
+
+  async login2FA(data: {
+    pre_auth_token: string;
+    code: string;
+  }): Promise<{ access_token: string }> {
+    return apiClient('/auth/login/2fa', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+  },
+
   async initiatePasswordReset(email: string): Promise<{ message: string }> {
-    const response = await fetch(`${API_Base}/auth/password-reset/initiate`, {
+    return apiClient('/auth/password-reset/initiate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-
-    if (!response.ok) {
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { message: 'Network error or invalid JSON response' };
-      }
-      throw new ApiError(response.status, errorData);
-    }
-
-    return response.json();
   },
 
   async completePasswordReset(data: {
@@ -30,22 +37,10 @@ export const authApi = {
     otp_code: string;
     new_password: string;
   }): Promise<{ message: string }> {
-    const response = await fetch(`${API_Base}/auth/password-reset/complete`, {
+    return apiClient('/auth/password-reset/complete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-
-    if (!response.ok) {
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { message: 'Network error or invalid JSON response' };
-      }
-      throw new ApiError(response.status, errorData);
-    }
-
-    return response.json();
   },
 };

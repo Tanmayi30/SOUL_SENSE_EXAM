@@ -1016,7 +1016,7 @@ class AppAuth:
             elif not age_str.isdigit():
                 ag_error_label.config(text="Age must be a number")
                 age_entry.config(highlightbackground="#EF4444", highlightcolor="#EF4444")
-                if  not first_field_with_error:
+                if not first_field_with_error:
                     first_field_with_error = age_entry
                 has_error = True
             else:

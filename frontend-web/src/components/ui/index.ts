@@ -7,3 +7,4 @@ export * from './tooltip';
 export * from './checkbox';
 export * from './progress';
 export * from './slider';
+export * from './modal';

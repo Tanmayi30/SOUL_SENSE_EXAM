@@ -40,11 +40,17 @@ export const Header = React.forwardRef<HTMLHeaderElement, HeaderProps>(
     // Get user initials from name
     const getUserInitials = (name?: string) => {
       if (!name) return 'U';
-      const parts = name.split(' ');
-      if (parts.length >= 2) {
+      const trimmedName = name.trim();
+      if (!trimmedName) return 'U';
+
+      // Split on any whitespace and ignore empty segments
+      const parts = trimmedName.split(/\s+/);
+
+      if (parts.length >= 2 && parts[0] && parts[1]) {
         return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
       }
-      return name.slice(0, 2).toUpperCase();
+
+      return trimmedName.slice(0, 2).toUpperCase();
     };
 
     const handleLogout = async () => {

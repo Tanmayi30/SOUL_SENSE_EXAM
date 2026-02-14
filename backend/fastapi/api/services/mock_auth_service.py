@@ -200,7 +200,7 @@ class MockAuthService:
         logger.debug(f"🎭 Created mock pre-auth token for user_id: {user_id}")
         return encoded_jwt
 
-    def initiate_2fa_login(self, user: User) -> str:
+    def initiate_2fa_login(self, user: User) -> Tuple[str, str]:
         """
         Mock 2FA login initiation.
         
